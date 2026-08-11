@@ -74,10 +74,9 @@ export default function DonationScreen() {
       return;
     }
 
-    const remaining =
-      type === 'zakat'
-        ? breakdown.zakatDue - breakdown.zakatGiven
-        : breakdown.sadqaDue - breakdown.sadqaGiven;
+    // "Due" already reflects what's actually left to donate (it's reduced as you donate),
+    // so it IS the remaining amount — no need to subtract "Given" from it here.
+    const remaining = type === 'zakat' ? breakdown.zakatDue : breakdown.sadqaDue;
 
     if (numericAmount > remaining) {
       Alert.alert(
@@ -138,19 +137,17 @@ export default function DonationScreen() {
       <View style={styles.breakdownRow}>
         <View style={styles.breakdownCard}>
           <Text style={styles.breakdownTitle}>Zakat</Text>
-          <Text style={styles.breakdownLine}>Due: Rs {breakdown.zakatDue.toFixed(0)}</Text>
-          <Text style={styles.breakdownLine}>Given: Rs {breakdown.zakatGiven.toFixed(0)}</Text>
           <Text style={styles.breakdownRemaining}>
-            Remaining: Rs {(breakdown.zakatDue - breakdown.zakatGiven).toFixed(0)}
+            To Be Donated: Rs {breakdown.zakatDue.toFixed(0)}
           </Text>
+          <Text style={styles.breakdownLine}>Donated: Rs {breakdown.zakatGiven.toFixed(0)}</Text>
         </View>
         <View style={styles.breakdownCard}>
           <Text style={styles.breakdownTitle}>Sadqa</Text>
-          <Text style={styles.breakdownLine}>Due: Rs {breakdown.sadqaDue.toFixed(0)}</Text>
-          <Text style={styles.breakdownLine}>Given: Rs {breakdown.sadqaGiven.toFixed(0)}</Text>
           <Text style={styles.breakdownRemaining}>
-            Remaining: Rs {(breakdown.sadqaDue - breakdown.sadqaGiven).toFixed(0)}
+            To Be Donated: Rs {breakdown.sadqaDue.toFixed(0)}
           </Text>
+          <Text style={styles.breakdownLine}>Donated: Rs {breakdown.sadqaGiven.toFixed(0)}</Text>
         </View>
       </View>
 

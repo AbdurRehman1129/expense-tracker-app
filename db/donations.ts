@@ -1,6 +1,7 @@
 import { getDatabase } from './database';
 import { Donation, DonationType } from '../types';
 import { addExpense, deleteExpense, updateExpense } from './expenses';
+import { reduceDueAmount, restoreDueAmount } from './donationDues';
 
 const DONATION_CATEGORY_NAME = 'Donation';
 
@@ -59,6 +60,9 @@ export async function addDonation(donation: {
     expenseId,
   ]);
 
+  // Subtract this donation from "To Be Donated" (consumes oldest due entries first)
+  await reduceDueAmount(donation.type, donation.amount);
+
   return result.lastInsertRowId;
 }
 
@@ -67,12 +71,15 @@ export async function updateDonation(id: number, updates: Partial<Donation>): Pr
   const donation = await db.getFirstAsync<Donation>('SELECT * FROM donations WHERE id = ?', [id]);
   if (!donation) return;
 
+  const newType = updates.type ?? donation.type;
+  const newAmount = updates.amount ?? donation.amount;
+
   await db.runAsync(
     'UPDATE donations SET type = ?, recipient = ?, amount = ?, date = ?, note = ? WHERE id = ?',
     [
-      updates.type ?? donation.type,
+      newType,
       updates.recipient ?? donation.recipient,
-      updates.amount ?? donation.amount,
+      newAmount,
       updates.date ?? donation.date,
       updates.note ?? donation.note,
       id,
@@ -82,10 +89,16 @@ export async function updateDonation(id: number, updates: Partial<Donation>): Pr
   // Keep linked expense in sync
   if (donation.linked_expense_id) {
     await updateExpense(donation.linked_expense_id, {
-      amount: updates.amount ?? donation.amount,
+      amount: newAmount,
       date: updates.date ?? donation.date,
-      note: `${updates.type ?? donation.type} donation${(updates.recipient ?? donation.recipient) ? ' to ' + (updates.recipient ?? donation.recipient) : ''}`,
+      note: `${newType} donation${(updates.recipient ?? donation.recipient) ? ' to ' + (updates.recipient ?? donation.recipient) : ''}`,
     });
+  }
+
+  // If the type or amount changed, undo the old consumption and re-apply with new values
+  if (newType !== donation.type || newAmount !== donation.amount) {
+    await restoreDueAmount(donation.type, donation.amount, donation.date, 'Restored (donation edited)');
+    await reduceDueAmount(newType, newAmount);
   }
 }
 
@@ -97,6 +110,10 @@ export async function deleteDonation(id: number): Promise<void> {
   if (donation.linked_expense_id) {
     await deleteExpense(donation.linked_expense_id);
   }
+
+  // Give the donated amount back to "To Be Donated"
+  await restoreDueAmount(donation.type, donation.amount, donation.date, 'Restored (donation deleted)');
+
   await db.runAsync('DELETE FROM donations WHERE id = ?', [id]);
 }
 
