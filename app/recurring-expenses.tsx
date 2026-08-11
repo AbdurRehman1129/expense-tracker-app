@@ -27,7 +27,28 @@ import { Category, RecurringExpense, RecurringFrequency } from '@/types';
 function todayString() {
   return new Date().toISOString().split('T')[0];
 }
+function calculateNextDueDate(
+  baseDate: string,
+  frequency: RecurringFrequency
+): string {
+  const date = new Date(`${baseDate}T00:00:00`);
 
+  switch (frequency) {
+    case 'daily':
+      date.setDate(date.getDate() + 1);
+      break;
+
+    case 'weekly':
+      date.setDate(date.getDate() + 7);
+      break;
+
+    case 'monthly':
+      date.setMonth(date.getMonth() + 1);
+      break;
+  }
+
+  return date.toISOString().split('T')[0];
+}
 export default function RecurringExpensesScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<RecurringExpense[]>([]);
@@ -169,7 +190,18 @@ export default function RecurringExpensesScreen() {
 
         <Text style={styles.label}>Frequency</Text>
         <View style={styles.pickerWrapper}>
-          <Picker selectedValue={frequency} onValueChange={(v) => setFrequency(v as RecurringFrequency)}>
+<Picker
+  selectedValue={frequency}
+  onValueChange={(v) => {
+    const newFrequency = v as RecurringFrequency;
+
+    setFrequency(newFrequency);
+
+    setNextDueDate(
+      calculateNextDueDate(nextDueDate, newFrequency)
+    );
+  }}
+>            <Picker.Item label="Daily" value="daily" />
             <Picker.Item label="Weekly" value="weekly" />
             <Picker.Item label="Monthly" value="monthly" />
           </Picker>

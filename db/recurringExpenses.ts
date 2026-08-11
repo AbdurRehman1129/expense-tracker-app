@@ -5,13 +5,20 @@ function todayString() {
   return new Date().toISOString().split('T')[0];
 }
 
-function advanceDate(dateStr: string, frequency: RecurringFrequency): string {
+function advanceDate(
+  dateStr: string,
+  frequency: RecurringFrequency
+): string {
   const date = new Date(dateStr);
-  if (frequency === 'weekly') {
+
+  if (frequency === 'daily') {
+    date.setDate(date.getDate() + 1);
+  } else if (frequency === 'weekly') {
     date.setDate(date.getDate() + 7);
-  } else {
+  } else if (frequency === 'monthly') {
     date.setMonth(date.getMonth() + 1);
   }
+
   return date.toISOString().split('T')[0];
 }
 

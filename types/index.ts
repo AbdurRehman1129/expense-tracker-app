@@ -56,7 +56,7 @@ export interface DonationDue {
   created_at: string;
 }
 
-export type RecurringFrequency = 'weekly' | 'monthly';
+export type RecurringFrequency = 'daily' | 'weekly' | 'monthly';
 
 export interface RecurringExpense {
   id: number;
