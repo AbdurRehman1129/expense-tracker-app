@@ -74,6 +74,19 @@ export default function DonationScreen() {
       return;
     }
 
+    const remaining =
+      type === 'zakat'
+        ? breakdown.zakatDue - breakdown.zakatGiven
+        : breakdown.sadqaDue - breakdown.sadqaGiven;
+
+    if (numericAmount > remaining) {
+      Alert.alert(
+        'Amount too high',
+        `You can donate at most Rs ${remaining.toFixed(0)} for ${type === 'zakat' ? 'Zakat' : 'Sadqa'} right now. You've entered Rs ${numericAmount.toFixed(0)}.`
+      );
+      return;
+    }
+
     await addDonation({
       type,
       recipient: recipient.trim() || undefined,
