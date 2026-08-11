@@ -42,7 +42,14 @@ export async function updateExpense(id: number, updates: Partial<Expense>): Prom
 
 export async function deleteExpense(id: number): Promise<void> {
   const db = await getDatabase();
+  const expense = await db.getFirstAsync<{ linked_donation_id: number | null }>(
+    'SELECT linked_donation_id FROM expenses WHERE id = ?',
+    [id]
+  );
   await db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);
+  if (expense?.linked_donation_id) {
+    await db.runAsync('DELETE FROM donations WHERE id = ?', [expense.linked_donation_id]);
+  }
 }
 
 export async function getTotalExpenses(startDate?: string, endDate?: string): Promise<number> {

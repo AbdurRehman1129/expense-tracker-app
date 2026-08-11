@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback,useEffect } from 'react';
 import {
   View,
   Text,
@@ -63,26 +63,29 @@ export default function DonationScreen() {
     const sadqaTotal = await getDonationTotals('sadqa');
     const generalTotal = await getDonationTotals('general');
     setTotals({ zakat: zakatTotal, sadqa: sadqaTotal, general: generalTotal });
-
-    const savedSadqaPercent = await getSetting('default_sadqa_percent');
-    if (savedSadqaPercent && type === 'sadqa' && percentage === '') {
-      setPercentage(savedSadqaPercent);
-    }
-  }, [type, percentage]);
+    }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [loadData])
   );
+  useEffect(() => {
+    (async () => {
+      const savedSadqaPercent = await getSetting('default_sadqa_percent');
+      if (savedSadqaPercent) setPercentage(savedSadqaPercent);
+    })();
+  }, []);
 
-  const applyType = (newType: DonationType) => {
+  const applyType = async (newType: DonationType) => {
     setType(newType);
     if (newType === 'zakat') {
       setPercentage('2.5');
       setPercentageLocked(true);
     } else if (newType === 'sadqa') {
       setPercentageLocked(false);
+      const savedSadqaPercent = await getSetting('default_sadqa_percent');
+      setPercentage(savedSadqaPercent ?? '');
     } else {
       setPercentage('');
       setPercentageLocked(false);
