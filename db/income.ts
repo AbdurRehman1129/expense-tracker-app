@@ -32,3 +32,17 @@ export async function deleteIncome(id: number): Promise<void> {
   const db = await getDatabase();
   await db.runAsync('DELETE FROM income WHERE id = ?', [id]);
 }
+
+export async function getTotalIncome(startDate?: string, endDate?: string): Promise<number> {
+  const db = await getDatabase();
+  let query = 'SELECT COALESCE(SUM(amount), 0) as total FROM income';
+  const params: string[] = [];
+
+  if (startDate && endDate) {
+    query += ' WHERE date BETWEEN ? AND ?';
+    params.push(startDate, endDate);
+  }
+
+  const result = await db.getFirstAsync<{ total: number }>(query, params);
+  return result?.total ?? 0;
+}

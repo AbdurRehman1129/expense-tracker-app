@@ -65,3 +65,28 @@ export async function getTotalExpenses(startDate?: string, endDate?: string): Pr
   const result = await db.getFirstAsync<{ total: number }>(query, params);
   return result?.total ?? 0;
 }
+
+export async function getExpensesByCategory(
+  startDate?: string,
+  endDate?: string
+): Promise<{ category_id: number; category_name: string; total: number }[]> {
+  const db = await getDatabase();
+  let query = `
+    SELECT e.category_id, c.name as category_name, SUM(e.amount) as total
+    FROM expenses e
+    JOIN categories c ON e.category_id = c.id
+  `;
+  const params: string[] = [];
+
+  if (startDate && endDate) {
+    query += ' WHERE e.date BETWEEN ? AND ?';
+    params.push(startDate, endDate);
+  }
+
+  query += ' GROUP BY e.category_id ORDER BY total DESC';
+
+  return db.getAllAsync<{ category_id: number; category_name: string; total: number }>(
+    query,
+    params
+  );
+}

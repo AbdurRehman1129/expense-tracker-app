@@ -100,11 +100,20 @@ export async function deleteDonation(id: number): Promise<void> {
   await db.runAsync('DELETE FROM donations WHERE id = ?', [id]);
 }
 
-export async function getDonationTotals(type: DonationType): Promise<number> {
+export async function getDonationTotals(
+  type: DonationType,
+  startDate?: string,
+  endDate?: string
+): Promise<number> {
   const db = await getDatabase();
-  const result = await db.getFirstAsync<{ total: number }>(
-    'SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE type = ?',
-    [type]
-  );
+  let query = 'SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE type = ?';
+  const params: (string | number)[] = [type];
+
+  if (startDate && endDate) {
+    query += ' AND date BETWEEN ? AND ?';
+    params.push(startDate, endDate);
+  }
+
+  const result = await db.getFirstAsync<{ total: number }>(query, params);
   return result?.total ?? 0;
 }
