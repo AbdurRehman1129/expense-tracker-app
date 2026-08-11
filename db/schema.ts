@@ -58,6 +58,19 @@ export async function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (linked_income_id) REFERENCES income(id)
     );
+    CREATE TABLE IF NOT EXISTS recurring_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      amount REAL NOT NULL,
+      category_id INTEGER NOT NULL,
+      frequency TEXT NOT NULL,
+      payment_method TEXT,
+      note TEXT,
+      next_due_date TEXT NOT NULL,
+      last_notified_date TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES categories(id)
+    );
     CREATE TABLE IF NOT EXISTS budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_id INTEGER NOT NULL,

@@ -55,3 +55,18 @@ export interface DonationDue {
   linked_income_id: number | null;
   created_at: string;
 }
+
+export type RecurringFrequency = 'weekly' | 'monthly';
+
+export interface RecurringExpense {
+  id: number;
+  amount: number;
+  category_id: number;
+  frequency: RecurringFrequency;
+  payment_method: string | null;
+  note: string | null;
+  next_due_date: string;
+  last_notified_date: string | null;
+  is_active: number;
+  created_at: string;
+}

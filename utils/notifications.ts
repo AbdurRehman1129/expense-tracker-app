@@ -34,3 +34,12 @@ export async function sendBudgetExceededNotification(categoryName: string, spent
     trigger: null,
   });
 }
+export async function sendRecurringDueNotification(categoryName: string, amount: number) {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Recurring Payment Due',
+      body: `Your recurring payment for ${categoryName} (Rs ${amount.toFixed(0)}) is due. Open the app to add it.`,
+    },
+    trigger: null,
+  });
+}

@@ -14,7 +14,7 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
-
+import { router } from 'expo-router';
 import { getAllCategories, addCategory } from '@/db/categories';
 import { addExpense, getAllExpenses, deleteExpense } from '@/db/expenses';
 import { Category, Expense } from '@/types';
@@ -185,6 +185,9 @@ const handleSave = async () => {
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.form}>
+        <TouchableOpacity onPress={() => router.push('/recurring-expenses')}>
+          <Text style={styles.recurringLink}>Manage Recurring Expenses</Text>
+        </TouchableOpacity>
         <Text style={styles.label}>Amount</Text>
         <TextInput
           style={styles.input}
@@ -325,4 +328,5 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
   empty: { textAlign: 'center', color: '#999', marginTop: 20 },
+  recurringLink: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginBottom: 8 },
 });

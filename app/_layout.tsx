@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDatabase } from '@/db/schema';
 import { requestNotificationPermissions } from '@/utils/notifications';
+import { checkAndPromptRecurringExpenses } from '@/utils/recurringCheck';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -20,6 +21,8 @@ export default function RootLayout() {
   useEffect(() => {
     initDatabase()
       .then(() => setDbReady(true))
+      .then(() => checkAndPromptRecurringExpenses())
+
       .catch((err) => console.error('Database init failed:', err));
     requestNotificationPermissions();
   }, []);
@@ -40,6 +43,7 @@ export default function RootLayout() {
         <Stack.Screen name="income" options={{ title: 'Income' }} />
         <Stack.Screen name="donation-due" options={{ title: 'Log Donation' }} />
         <Stack.Screen name="budgets" options={{ title: 'Budgets' }} />
+        <Stack.Screen name="recurring-expenses" options={{ title: 'Recurring Expenses' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
