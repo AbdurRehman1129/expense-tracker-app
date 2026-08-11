@@ -7,8 +7,7 @@ import { getTotalExpenses, getExpensesByCategory } from '@/db/expenses';
 import { getTotalIncome } from '@/db/income';
 import { getDonationTotals } from '@/db/donations';
 import { getMonthRange } from '@/utils/dateRanges';
-import { getAllBudgets } from '@/db/budgets';
-import { Budget } from '@/types';
+import { getAllBudgetsWithCategory, BudgetWithCategory } from '@/db/budgets';
 
 type RangeMode = 'month' | 'all';
 type CategoryTotal = { category_id: number; category_name: string; total: number };
@@ -21,7 +20,7 @@ export default function DashboardScreen() {
   const [totalIncome, setTotalIncome] = useState(0);
   const [donationTotals, setDonationTotals] = useState({ zakat: 0, sadqa: 0 });
   const [categoryData, setCategoryData] = useState<CategoryTotal[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [budgets, setBudgets] = useState<BudgetWithCategory[]>([]);
 
   const loadData = useCallback(async (currentMode: RangeMode) => {
     let start: string | undefined;
@@ -39,7 +38,7 @@ export default function DashboardScreen() {
       getDonationTotals('zakat', start, end),
       getDonationTotals('sadqa', start, end),
       getExpensesByCategory(start, end),
-      getAllBudgets(),
+      getAllBudgetsWithCategory(),
     ]);
 
     setTotalExpense(expense);
@@ -153,12 +152,11 @@ export default function DashboardScreen() {
           const spent = cat?.total ?? 0;
           const percent = Math.min((spent / b.monthly_limit) * 100, 100);
           const isOver = spent > b.monthly_limit;
-          const categoryName = cat?.category_name ?? 'Category';
 
           return (
             <View key={b.category_id} style={styles.budgetItem}>
               <View style={styles.budgetItemHeader}>
-                <Text style={styles.budgetCategoryName}>{categoryName}</Text>
+                <Text style={styles.budgetCategoryName}>{b.category_name}</Text>
                 <Text style={[styles.budgetAmountText, isOver && styles.budgetOverText]}>
                   Rs {spent.toFixed(0)} / Rs {b.monthly_limit.toFixed(0)}
                 </Text>

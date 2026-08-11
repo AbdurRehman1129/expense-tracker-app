@@ -8,12 +8,14 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Modal,
+  Keyboard,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
 
-import { getAllCategories } from '@/db/categories';
+import { getAllCategories, addCategory } from '@/db/categories';
 import { addExpense, getAllExpenses, deleteExpense } from '@/db/expenses';
 import { Category, Expense } from '@/types';
 import ExpenseListItem from '@/components/ExpenseListItem';
@@ -38,6 +40,9 @@ export default function AddExpenseScreen() {
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [note, setNote] = useState('');
 
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
   const loadData = useCallback(async () => {
     const cats = await getAllCategories();
     setCategories(cats);
@@ -54,13 +59,18 @@ export default function AddExpenseScreen() {
     }, [loadData])
   );
 
-  const handleSave = async () => {
+const handleSave = async () => {
+  // First: hide keyboard immediately
+  Keyboard.dismiss();
+
+  try {
     const numericAmount = parseFloat(amount);
 
     if (!numericAmount || numericAmount <= 0) {
       Alert.alert('Invalid amount', 'Please enter a valid amount greater than 0.');
       return;
     }
+
     if (!categoryId) {
       Alert.alert('Category required', 'Please select a category.');
       return;
@@ -72,7 +82,8 @@ export default function AddExpenseScreen() {
     if (budget) {
       const { start, end } = getMonthRange();
       const beforeData = await getExpensesByCategory(start, end);
-      spentBefore = beforeData.find((c) => c.category_id === categoryId)?.total ?? 0;
+      spentBefore =
+        beforeData.find((c) => c.category_id === categoryId)?.total ?? 0;
     }
 
     await addExpense({
@@ -85,37 +96,94 @@ export default function AddExpenseScreen() {
 
     if (budget) {
       const spentAfter = spentBefore + numericAmount;
-      if (spentBefore <= budget.monthly_limit && spentAfter > budget.monthly_limit) {
+
+      if (
+        spentBefore <= budget.monthly_limit &&
+        spentAfter > budget.monthly_limit
+      ) {
         const categoryName = getCategoryName(categoryId);
-        await sendBudgetExceededNotification(categoryName, spentAfter, budget.monthly_limit);
+
+        await sendBudgetExceededNotification(
+          categoryName,
+          spentAfter,
+          budget.monthly_limit
+        );
       }
     }
 
+    // Clear form
     setAmount('');
     setNote('');
     setDate(todayString());
-    loadData();
-  };
+
+    await loadData();
+
+    // Success popup
+    Alert.alert('Success', 'Expense saved successfully!');
+  } catch (error) {
+    console.error('Failed to save expense:', error);
+
+    // Failure popup
+    Alert.alert(
+      'Save failed',
+      'Something went wrong while saving the expense.'
+    );
+  }
+};
 
   const handleDelete = async (id: number) => {
-    Alert.alert('Delete expense?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
+
+  Alert.alert('Delete expense?', 'This cannot be undone.', [
+    {
+      text: 'Cancel',
+      style: 'cancel',
+    },
+    {
+      text: 'Delete',
+      style: 'destructive',
+      onPress: async () => {
+        try {
           await deleteExpense(id);
-          loadData();
-        },
+          await loadData();
+
+          Alert.alert('Success', 'Expense deleted successfully!');
+        } catch (error) {
+          console.error('Failed to delete expense:', error);
+
+          Alert.alert(
+            'Delete failed',
+            'Something went wrong while deleting the expense.'
+          );
+        }
       },
-    ]);
-  };
+    },
+  ]);
+};
 
   const getCategoryName = (id: number) =>
     categories.find((c) => c.id === id)?.name ?? 'Unknown';
 
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      Alert.alert('Name required', 'Enter a name for the new category.');
+      return;
+    }
+    const exists = categories.some((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      Alert.alert('Already exists', 'A category with this name already exists.');
+      return;
+    }
+    const newId = await addCategory(name, 'pricetag-outline');
+    setNewCategoryName('');
+    setShowAddCategory(false);
+    const cats = await getAllCategories();
+    setCategories(cats);
+    setCategoryId(newId);
+  };
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.form}>
         <Text style={styles.label}>Amount</Text>
         <TextInput
@@ -126,7 +194,12 @@ export default function AddExpenseScreen() {
           onChangeText={setAmount}
         />
 
-        <Text style={styles.label}>Category</Text>
+        <View style={styles.rowBetween}>
+          <Text style={styles.label}>Category</Text>
+          <TouchableOpacity onPress={() => setShowAddCategory(true)}>
+            <Text style={styles.linkText}>+ Add New Category</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.pickerWrapper}>
           <Picker selectedValue={categoryId} onValueChange={(val) => setCategoryId(val)}>
             {categories.map((cat) => (
@@ -188,6 +261,33 @@ export default function AddExpenseScreen() {
           />
         ))
       )}
+
+      <Modal visible={showAddCategory} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>New Category</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Subscriptions"
+              value={newCategoryName}
+              onChangeText={setNewCategoryName}
+              autoFocus
+            />
+            <TouchableOpacity style={styles.saveButton} onPress={handleAddCategory}>
+              <Text style={styles.saveButtonText}>Add Category</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => {
+                setShowAddCategory(false);
+                setNewCategoryName('');
+              }}
+            >
+              <Text style={styles.modalCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -208,6 +308,13 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderRadius: 8,
   },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+  linkText: { fontSize: 12, color: '#2563eb', fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
+  modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
+  modalClose: { marginTop: 12, alignItems: 'center', padding: 10 },
+  modalCloseText: { color: '#2563eb', fontWeight: '600' },
   saveButton: {
     backgroundColor: '#2563eb',
     borderRadius: 8,

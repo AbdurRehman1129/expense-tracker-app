@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Keyboard,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
@@ -67,6 +68,9 @@ export default function DonationScreen() {
   );
 
   const handleSave = async () => {
+  Keyboard.dismiss();
+
+  try {
     const numericAmount = parseFloat(amount);
 
     if (!numericAmount || numericAmount <= 0) {
@@ -74,14 +78,15 @@ export default function DonationScreen() {
       return;
     }
 
-    // "Due" already reflects what's actually left to donate (it's reduced as you donate),
-    // so it IS the remaining amount — no need to subtract "Given" from it here.
-    const remaining = type === 'zakat' ? breakdown.zakatDue : breakdown.sadqaDue;
+    const remaining =
+      type === 'zakat' ? breakdown.zakatDue : breakdown.sadqaDue;
 
     if (numericAmount > remaining) {
       Alert.alert(
         'Amount too high',
-        `You can donate at most Rs ${remaining.toFixed(0)} for ${type === 'zakat' ? 'Zakat' : 'Sadqa'} right now. You've entered Rs ${numericAmount.toFixed(0)}.`
+        `You can donate at most Rs ${remaining.toFixed(0)} for ${
+          type === 'zakat' ? 'Zakat' : 'Sadqa'
+        } right now. You've entered Rs ${numericAmount.toFixed(0)}.`
       );
       return;
     }
@@ -99,25 +104,52 @@ export default function DonationScreen() {
     setNote('');
     setDate(todayString());
 
-    loadData();
-  };
+    await loadData();
 
-  const handleDelete = async (id: number) => {
-    Alert.alert('Delete donation?', 'This will also remove the linked expense entry.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('Success', 'Donation saved successfully!');
+  } catch (error) {
+    console.error('Failed to save donation:', error);
+
+    Alert.alert(
+      'Save failed',
+      'Something went wrong while saving the donation.'
+    );
+  }
+};
+
+ const handleDelete = async (id: number) => {
+  Alert.alert(
+    'Delete donation?',
+    'This will also remove the linked expense entry.',
+    [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await deleteDonation(id);
-          loadData();
+          try {
+            await deleteDonation(id);
+            await loadData();
+
+            Alert.alert('Success', 'Donation deleted successfully!');
+          } catch (error) {
+            console.error('Failed to delete donation:', error);
+
+            Alert.alert(
+              'Delete failed',
+              'Something went wrong while deleting the donation.'
+            );
+          }
         },
       },
-    ]);
-  };
-
+    ]
+  );
+};
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, { backgroundColor: '#f59e0b' }]}>
           <Text style={styles.summaryLabel}>To Be Donated</Text>

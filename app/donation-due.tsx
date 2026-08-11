@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   FlatList,
+  Keyboard,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
@@ -107,10 +108,16 @@ export default function DonationDueScreen() {
   };
 
   const handleSave = async () => {
+  Keyboard.dismiss();
+
+  try {
     const numericAmount = parseFloat(dueAmount);
 
     if (!numericAmount || numericAmount <= 0) {
-      Alert.alert('Invalid amount', 'Please enter a valid amount to donate.');
+      Alert.alert(
+        'Invalid amount',
+        'Please enter a valid amount to donate.'
+      );
       return;
     }
 
@@ -132,25 +139,49 @@ export default function DonationDueScreen() {
     setDate(todayString());
     setLinkedIncomeId(null);
 
-    loadData();
-  };
+    await loadData();
+
+    Alert.alert('Success', 'Donation due saved successfully!');
+  } catch (error) {
+    console.error('Failed to save donation due:', error);
+
+    Alert.alert(
+      'Save failed',
+      'Something went wrong while saving the donation due.'
+    );
+  }
+};
 
   const handleDelete = async (id: number) => {
-    Alert.alert('Delete this due entry?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
+  Alert.alert('Delete this due entry?', 'This cannot be undone.', [
+    {
+      text: 'Cancel',
+      style: 'cancel',
+    },
+    {
+      text: 'Delete',
+      style: 'destructive',
+      onPress: async () => {
+        try {
           await deleteDonationDue(id);
-          loadData();
-        },
+          await loadData();
+
+          Alert.alert('Success', 'Donation due deleted successfully!');
+        } catch (error) {
+          console.error('Failed to delete donation due:', error);
+
+          Alert.alert(
+            'Delete failed',
+            'Something went wrong while deleting the donation due.'
+          );
+        }
       },
-    ]);
-  };
+    },
+  ]);
+};
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, { backgroundColor: '#7c3aed' }]}>
           <Text style={styles.summaryLabel}>Zakat Due (Total)</Text>

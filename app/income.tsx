@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Keyboard,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
@@ -41,10 +42,16 @@ export default function IncomeScreen() {
   );
 
   const handleSave = async () => {
+  Keyboard.dismiss();
+
+  try {
     const numericAmount = parseFloat(amount);
 
     if (!numericAmount || numericAmount <= 0) {
-      Alert.alert('Invalid amount', 'Please enter a valid amount greater than 0.');
+      Alert.alert(
+        'Invalid amount',
+        'Please enter a valid amount greater than 0.'
+      );
       return;
     }
 
@@ -59,27 +66,52 @@ export default function IncomeScreen() {
     setSource('');
     setNote('');
     setDate(todayString());
-    loadData();
-  };
+
+    await loadData();
+
+    Alert.alert('Success', 'Income saved successfully!');
+  } catch (error) {
+    console.error('Failed to save income:', error);
+
+    Alert.alert(
+      'Save failed',
+      'Something went wrong while saving the income.'
+    );
+  }
+};
 
   const handleDelete = async (id: number) => {
-    Alert.alert('Delete income entry?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
+  Alert.alert('Delete income entry?', 'This cannot be undone.', [
+    {
+      text: 'Cancel',
+      style: 'cancel',
+    },
+    {
+      text: 'Delete',
+      style: 'destructive',
+      onPress: async () => {
+        try {
           await deleteIncome(id);
-          loadData();
-        },
+          await loadData();
+
+          Alert.alert('Success', 'Income deleted successfully!');
+        } catch (error) {
+          console.error('Failed to delete income:', error);
+
+          Alert.alert(
+            'Delete failed',
+            'Something went wrong while deleting the income.'
+          );
+        }
       },
-    ]);
-  };
+    },
+  ]);
+};
 
   const totalIncome = incomeList.reduce((sum, i) => sum + i.amount, 0);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.summary}>
         <Text style={styles.summaryLabel}>Total Income Logged</Text>
         <Text style={styles.summaryAmount}>Rs {totalIncome.toFixed(0)}</Text>
