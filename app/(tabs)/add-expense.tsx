@@ -1,14 +1,199 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  Alert,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useFocusEffect } from 'expo-router';
+
+import { getAllCategories } from '@/db/categories';
+import { addExpense, getAllExpenses, deleteExpense } from '@/db/expenses';
+import { Category, Expense } from '@/types';
+import ExpenseListItem from '@/components/ExpenseListItem';
+
+function todayString() {
+  return new Date().toISOString().split('T')[0];
+}
 
 export default function AddExpenseScreen() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+
+  const [amount, setAmount] = useState('');
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [date, setDate] = useState(todayString());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [note, setNote] = useState('');
+
+  const loadData = useCallback(async () => {
+    const cats = await getAllCategories();
+    setCategories(cats);
+    if (cats.length > 0 && categoryId === null) {
+      setCategoryId(cats[0].id);
+    }
+    const exps = await getAllExpenses();
+    setExpenses(exps);
+  }, [categoryId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const handleSave = async () => {
+    const numericAmount = parseFloat(amount);
+
+    if (!numericAmount || numericAmount <= 0) {
+      Alert.alert('Invalid amount', 'Please enter a valid amount greater than 0.');
+      return;
+    }
+    if (!categoryId) {
+      Alert.alert('Category required', 'Please select a category.');
+      return;
+    }
+
+    await addExpense({
+      amount: numericAmount,
+      category_id: categoryId,
+      date,
+      note: note.trim() || undefined,
+      payment_method: paymentMethod,
+    });
+
+    setAmount('');
+    setNote('');
+    setDate(todayString());
+    loadData();
+  };
+
+  const handleDelete = async (id: number) => {
+    Alert.alert('Delete expense?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteExpense(id);
+          loadData();
+        },
+      },
+    ]);
+  };
+
+  const getCategoryName = (id: number) =>
+    categories.find((c) => c.id === id)?.name ?? 'Unknown';
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Add Expense</Text>
-    </View>
+    <ScrollView style={styles.container}>
+      <View style={styles.form}>
+        <Text style={styles.label}>Amount</Text>
+        <TextInput
+          style={styles.input}
+          keyboardType="numeric"
+          placeholder="0"
+          value={amount}
+          onChangeText={setAmount}
+        />
+
+        <Text style={styles.label}>Category</Text>
+        <View style={styles.pickerWrapper}>
+          <Picker selectedValue={categoryId} onValueChange={(val) => setCategoryId(val)}>
+            {categories.map((cat) => (
+              <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
+            ))}
+          </Picker>
+        </View>
+
+        <Text style={styles.label}>Date</Text>
+        <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
+          <Text>{date}</Text>
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={new Date(date)}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, selectedDate) => {
+              setShowDatePicker(false);
+              if (selectedDate) {
+                setDate(selectedDate.toISOString().split('T')[0]);
+              }
+            }}
+          />
+        )}
+
+        <Text style={styles.label}>Payment Method</Text>
+        <View style={styles.pickerWrapper}>
+          <Picker selectedValue={paymentMethod} onValueChange={setPaymentMethod}>
+            <Picker.Item label="Cash" value="Cash" />
+            <Picker.Item label="Card" value="Card" />
+            <Picker.Item label="Bank Transfer" value="Bank" />
+          </Picker>
+        </View>
+
+        <Text style={styles.label}>Note (optional)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. groceries"
+          value={note}
+          onChangeText={setNote}
+        />
+
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <Text style={styles.saveButtonText}>Save Expense</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionTitle}>Recent Expenses</Text>
+      {expenses.length === 0 ? (
+        <Text style={styles.empty}>No expenses logged yet.</Text>
+      ) : (
+        expenses.map((exp) => (
+          <ExpenseListItem
+            key={exp.id}
+            expense={exp}
+            categoryName={getCategoryName(exp.category_id)}
+            onDelete={handleDelete}
+          />
+        ))
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: '#fff' },
+  form: { padding: 16 },
+  label: { fontSize: 13, color: '#666', marginTop: 12, marginBottom: 4 },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+  },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+  },
+  saveButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
+  empty: { textAlign: 'center', color: '#999', marginTop: 20 },
 });
