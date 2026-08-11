@@ -25,40 +25,59 @@ import {
 import { Category, RecurringExpense, RecurringFrequency } from '@/types';
 
 function todayString() {
-  return new Date().toISOString().split('T')[0];
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 function calculateNextDueDate(
-  baseDate: string,
+  startDate: string,
   frequency: RecurringFrequency
-): string {
-  const date = new Date(`${baseDate}T00:00:00`);
+) {
+  const date = new Date(`${startDate}T00:00:00`);
 
-  switch (frequency) {
-    case 'daily':
-      date.setDate(date.getDate() + 1);
-      break;
-
-    case 'weekly':
-      date.setDate(date.getDate() + 7);
-      break;
-
-    case 'monthly':
-      date.setMonth(date.getMonth() + 1);
-      break;
+  if (frequency === 'daily') {
+    date.setDate(date.getDate() + 1);
+  } else if (frequency === 'weekly') {
+    date.setDate(date.getDate() + 7);
+  } else if (frequency === 'monthly') {
+    date.setMonth(date.getMonth() + 1);
   }
 
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }
 export default function RecurringExpensesScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<RecurringExpense[]>([]);
 
-  const [amount, setAmount] = useState('');
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
-  const [nextDueDate, setNextDueDate] = useState(todayString());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [note, setNote] = useState('');
+const [amount, setAmount] = useState('');
+const [categoryId, setCategoryId] = useState<number | null>(null);
+
+const [frequency, setFrequency] =
+  useState<RecurringFrequency>('monthly');
+
+const [startDate, setStartDate] =
+  useState(todayString());
+
+const [nextDueDate, setNextDueDate] =
+  useState(
+    calculateNextDueDate(
+      todayString(),
+      'monthly'
+    )
+  );
+
+const [showDatePicker, setShowDatePicker] =
+  useState(false);
+
+const [note, setNote] = useState('');
 
   const loadData = useCallback(async () => {
     const cats = await getAllCategories();
@@ -74,7 +93,18 @@ export default function RecurringExpensesScreen() {
       loadData();
     }, [loadData])
   );
+const handleFrequencyChange = (
+  value: RecurringFrequency
+) => {
+  setFrequency(value);
 
+  setNextDueDate(
+    calculateNextDueDate(
+      startDate,
+      value
+    )
+  );
+};
   const handleSave = async () => {
   Keyboard.dismiss();
 
@@ -106,10 +136,20 @@ export default function RecurringExpensesScreen() {
     });
 
     setAmount('');
-    setNote('');
-    setNextDueDate(todayString());
+setNote('');
 
-    await loadData();
+const newStartDate = todayString();
+
+setStartDate(newStartDate);
+
+setNextDueDate(
+  calculateNextDueDate(
+    newStartDate,
+    frequency
+  )
+);
+
+await loadData();
 
     Alert.alert(
       'Success',
@@ -192,36 +232,57 @@ export default function RecurringExpensesScreen() {
         <View style={styles.pickerWrapper}>
 <Picker
   selectedValue={frequency}
-  onValueChange={(v) => {
-    const newFrequency = v as RecurringFrequency;
-
-    setFrequency(newFrequency);
-
-    setNextDueDate(
-      calculateNextDueDate(nextDueDate, newFrequency)
-    );
-  }}
->            <Picker.Item label="Daily" value="daily" />
-            <Picker.Item label="Weekly" value="weekly" />
-            <Picker.Item label="Monthly" value="monthly" />
-          </Picker>
+  onValueChange={(v) =>
+    handleFrequencyChange(v as RecurringFrequency)
+  }
+>
+  <Picker.Item label="Daily" value="daily" />
+  <Picker.Item label="Weekly" value="weekly" />
+  <Picker.Item label="Monthly" value="monthly" />
+</Picker>
         </View>
 
-        <Text style={styles.label}>Next Due Date</Text>
-        <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-          <Text>{nextDueDate}</Text>
-        </TouchableOpacity>
+        <Text style={styles.label}>Start Date</Text>
+
+<TouchableOpacity
+  style={styles.input}
+  onPress={() => setShowDatePicker(true)}
+>
+  <Text>{startDate}</Text>
+</TouchableOpacity>
+<Text style={styles.label}>Next Due Date</Text>
+
+<View style={styles.input}>
+  <Text>{nextDueDate}</Text>
+</View>
         {showDatePicker && (
-          <DateTimePicker
-            value={new Date(nextDueDate)}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(false);
-              if (selectedDate) setNextDueDate(selectedDate.toISOString().split('T')[0]);
-            }}
-          />
-        )}
+  <DateTimePicker
+    value={new Date(`${startDate}T00:00:00`)}
+    mode="date"
+    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+    onChange={(event, selectedDate) => {
+      setShowDatePicker(false);
+
+      if (selectedDate) {
+        const newStartDate =
+          `${selectedDate.getFullYear()}-${String(
+            selectedDate.getMonth() + 1
+          ).padStart(2, '0')}-${String(
+            selectedDate.getDate()
+          ).padStart(2, '0')}`;
+
+        setStartDate(newStartDate);
+
+        setNextDueDate(
+          calculateNextDueDate(
+            newStartDate,
+            frequency
+          )
+        );
+      }
+    }}
+  />
+)}
 
         <Text style={styles.label}>Note (optional)</Text>
         <TextInput style={styles.input} placeholder="e.g. Netflix subscription" value={note} onChangeText={setNote} />
