@@ -17,7 +17,7 @@ export default function DashboardScreen() {
   const [mode, setMode] = useState<RangeMode>('month');
   const [totalExpense, setTotalExpense] = useState(0);
   const [totalIncome, setTotalIncome] = useState(0);
-  const [donationTotals, setDonationTotals] = useState({ zakat: 0, sadqa: 0, general: 0 });
+  const [donationTotals, setDonationTotals] = useState({ zakat: 0, sadqa: 0 });
   const [categoryData, setCategoryData] = useState<CategoryTotal[]>([]);
 
   const loadData = useCallback(async (currentMode: RangeMode) => {
@@ -30,18 +30,17 @@ export default function DashboardScreen() {
       end = range.end;
     }
 
-    const [expense, income, zakat, sadqa, general, byCategory] = await Promise.all([
+    const [expense, income, zakat, sadqa, byCategory] = await Promise.all([
       getTotalExpenses(start, end),
       getTotalIncome(start, end),
       getDonationTotals('zakat', start, end),
       getDonationTotals('sadqa', start, end),
-      getDonationTotals('general', start, end),
       getExpensesByCategory(start, end),
     ]);
 
     setTotalExpense(expense);
     setTotalIncome(income);
-    setDonationTotals({ zakat, sadqa, general });
+    setDonationTotals({ zakat, sadqa});
     setCategoryData(byCategory);
   }, []);
 
@@ -113,10 +112,6 @@ export default function DashboardScreen() {
         <View style={[styles.donationCard, { backgroundColor: '#0891b2' }]}>
           <Text style={styles.donationLabel}>Sadqa</Text>
           <Text style={styles.donationAmount}>Rs {donationTotals.sadqa.toFixed(0)}</Text>
-        </View>
-        <View style={[styles.donationCard, { backgroundColor: '#ea580c' }]}>
-          <Text style={styles.donationLabel}>General</Text>
-          <Text style={styles.donationAmount}>Rs {donationTotals.general.toFixed(0)}</Text>
         </View>
       </View>
 

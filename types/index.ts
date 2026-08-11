@@ -26,7 +26,7 @@ export interface Income {
   created_at: string;
 }
 
-export type DonationType = 'zakat' | 'sadqa' | 'general';
+export type DonationType = 'zakat' | 'sadqa' ;
 
 export interface Donation {
   id: number;
@@ -44,4 +44,14 @@ export interface Budget {
   id: number;
   category_id: number;
   monthly_limit: number;
+}
+
+export interface DonationDue {
+  id: number;
+  type: DonationType;
+  amount: number;
+  date: string;
+  note: string | null;
+  linked_income_id: number | null;
+  created_at: string;
 }

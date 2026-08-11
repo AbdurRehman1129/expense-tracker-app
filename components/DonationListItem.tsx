@@ -9,13 +9,11 @@ interface Props {
 const TYPE_LABELS: Record<string, string> = {
   zakat: 'Zakat',
   sadqa: 'Sadqa',
-  general: 'General',
 };
 
 const TYPE_COLORS: Record<string, string> = {
   zakat: '#7c3aed',
   sadqa: '#0891b2',
-  general: '#ea580c',
 };
 
 export default function DonationListItem({ donation, onDelete }: Props) {

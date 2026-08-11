@@ -48,7 +48,16 @@ export async function initDatabase() {
       FOREIGN KEY (linked_income_id) REFERENCES income(id),
       FOREIGN KEY (linked_expense_id) REFERENCES expenses(id)
     );
-
+    CREATE TABLE IF NOT EXISTS donation_dues (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT,
+      linked_income_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (linked_income_id) REFERENCES income(id)
+    );
     CREATE TABLE IF NOT EXISTS budgets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_id INTEGER NOT NULL,
