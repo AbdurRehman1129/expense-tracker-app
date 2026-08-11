@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDatabase } from '@/db/schema';
+import { requestNotificationPermissions } from '@/utils/notifications';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -20,6 +21,7 @@ export default function RootLayout() {
     initDatabase()
       .then(() => setDbReady(true))
       .catch((err) => console.error('Database init failed:', err));
+    requestNotificationPermissions();
   }, []);
 
   if (!dbReady) {
@@ -37,6 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         <Stack.Screen name="income" options={{ title: 'Income' }} />
         <Stack.Screen name="donation-due" options={{ title: 'Log Donation' }} />
+        <Stack.Screen name="budgets" options={{ title: 'Budgets' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

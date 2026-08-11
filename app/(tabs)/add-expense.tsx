@@ -17,6 +17,11 @@ import { getAllCategories } from '@/db/categories';
 import { addExpense, getAllExpenses, deleteExpense } from '@/db/expenses';
 import { Category, Expense } from '@/types';
 import ExpenseListItem from '@/components/ExpenseListItem';
+import { getBudgetForCategory } from '@/db/budgets';
+import { sendBudgetExceededNotification } from '@/utils/notifications';
+import { getExpensesByCategory } from '@/db/expenses';
+import { getMonthRange } from '@/utils/dateRanges';
+
 
 function todayString() {
   return new Date().toISOString().split('T')[0];
@@ -61,6 +66,15 @@ export default function AddExpenseScreen() {
       return;
     }
 
+    const budget = await getBudgetForCategory(categoryId);
+    let spentBefore = 0;
+
+    if (budget) {
+      const { start, end } = getMonthRange();
+      const beforeData = await getExpensesByCategory(start, end);
+      spentBefore = beforeData.find((c) => c.category_id === categoryId)?.total ?? 0;
+    }
+
     await addExpense({
       amount: numericAmount,
       category_id: categoryId,
@@ -68,6 +82,14 @@ export default function AddExpenseScreen() {
       note: note.trim() || undefined,
       payment_method: paymentMethod,
     });
+
+    if (budget) {
+      const spentAfter = spentBefore + numericAmount;
+      if (spentBefore <= budget.monthly_limit && spentAfter > budget.monthly_limit) {
+        const categoryName = getCategoryName(categoryId);
+        await sendBudgetExceededNotification(categoryName, spentAfter, budget.monthly_limit);
+      }
+    }
 
     setAmount('');
     setNote('');

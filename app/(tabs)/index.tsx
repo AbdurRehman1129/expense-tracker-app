@@ -7,6 +7,8 @@ import { getTotalExpenses, getExpensesByCategory } from '@/db/expenses';
 import { getTotalIncome } from '@/db/income';
 import { getDonationTotals } from '@/db/donations';
 import { getMonthRange } from '@/utils/dateRanges';
+import { getAllBudgets } from '@/db/budgets';
+import { Budget } from '@/types';
 
 type RangeMode = 'month' | 'all';
 type CategoryTotal = { category_id: number; category_name: string; total: number };
@@ -19,6 +21,7 @@ export default function DashboardScreen() {
   const [totalIncome, setTotalIncome] = useState(0);
   const [donationTotals, setDonationTotals] = useState({ zakat: 0, sadqa: 0 });
   const [categoryData, setCategoryData] = useState<CategoryTotal[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
 
   const loadData = useCallback(async (currentMode: RangeMode) => {
     let start: string | undefined;
@@ -30,18 +33,20 @@ export default function DashboardScreen() {
       end = range.end;
     }
 
-    const [expense, income, zakat, sadqa, byCategory] = await Promise.all([
+    const [expense, income, zakat, sadqa, byCategory, budgetList] = await Promise.all([
       getTotalExpenses(start, end),
       getTotalIncome(start, end),
       getDonationTotals('zakat', start, end),
       getDonationTotals('sadqa', start, end),
       getExpensesByCategory(start, end),
+      getAllBudgets(),
     ]);
 
     setTotalExpense(expense);
     setTotalIncome(income);
     setDonationTotals({ zakat, sadqa});
     setCategoryData(byCategory);
+    setBudgets(budgetList);
   }, []);
 
   useFocusEffect(
@@ -132,6 +137,44 @@ export default function DashboardScreen() {
           absolute
         />
       )}
+
+      <View style={styles.budgetHeaderRow}>
+        <Text style={styles.sectionTitle}>Budget Progress</Text>
+        <TouchableOpacity onPress={() => router.push('/budgets')}>
+          <Text style={styles.manageBudgetsLink}>Manage Budgets</Text>
+        </TouchableOpacity>
+      </View>
+
+      {budgets.length === 0 ? (
+        <Text style={styles.empty}>No budgets set yet.</Text>
+      ) : (
+        budgets.map((b) => {
+          const cat = categoryData.find((c) => c.category_id === b.category_id);
+          const spent = cat?.total ?? 0;
+          const percent = Math.min((spent / b.monthly_limit) * 100, 100);
+          const isOver = spent > b.monthly_limit;
+          const categoryName = cat?.category_name ?? 'Category';
+
+          return (
+            <View key={b.category_id} style={styles.budgetItem}>
+              <View style={styles.budgetItemHeader}>
+                <Text style={styles.budgetCategoryName}>{categoryName}</Text>
+                <Text style={[styles.budgetAmountText, isOver && styles.budgetOverText]}>
+                  Rs {spent.toFixed(0)} / Rs {b.monthly_limit.toFixed(0)}
+                </Text>
+              </View>
+              <View style={styles.progressBarBg}>
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    { width: `${percent}%`, backgroundColor: isOver ? '#dc2626' : '#16a34a' },
+                  ]}
+                />
+              </View>
+            </View>
+          );
+        })
+      )}
     </ScrollView>
   );
 }
@@ -170,4 +213,27 @@ const styles = StyleSheet.create({
   donationLabel: { color: '#fff', fontSize: 11 },
   donationAmount: { color: '#fff', fontSize: 16, fontWeight: '800', marginTop: 2 },
   empty: { textAlign: 'center', color: '#999', marginTop: 10, marginBottom: 20 },
+  budgetHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  manageBudgetsLink: { fontSize: 13, color: '#2563eb', fontWeight: '600' },
+  budgetItem: { marginHorizontal: 16, marginBottom: 14 },
+  budgetItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  budgetCategoryName: { fontSize: 14, fontWeight: '600' },
+  budgetAmountText: { fontSize: 13, color: '#666' },
+  budgetOverText: { color: '#dc2626', fontWeight: '700' },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: '#eee',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: { height: '100%', borderRadius: 4 },
 });
