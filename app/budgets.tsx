@@ -2,7 +2,11 @@ import { useState, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert,Keyboard } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
-import { getAllCategories, addCategory } from '@/db/categories';
+import {
+  getAllCategories,
+  addCategory,
+  deleteCategory,
+} from '@/db/categories';
 import { getAllBudgets, setBudget, deleteBudget } from '@/db/budgets';
 import { Category, Budget } from '@/types';
 
@@ -100,8 +104,48 @@ export default function BudgetsScreen() {
     loadData();
   };
 
-  const getBudgetFor = (categoryId: number) =>
-    budgets.find((b) => b.category_id === categoryId);
+const handleDeleteCategory = async (categoryId: number, categoryName: string) => {
+  Alert.alert(
+    'Delete category?',
+    `Are you sure you want to delete "${categoryName}"?`,
+    [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteCategory(categoryId);
+            await loadData();
+
+            Alert.alert(
+              'Success',
+              `"${categoryName}" was deleted successfully.`
+            );
+          } catch (error) {
+            console.error('Failed to delete category:', error);
+
+            const message =
+              error instanceof Error
+                ? error.message
+                : 'Something went wrong while deleting the category.';
+
+            Alert.alert(
+              'Delete failed',
+              message
+            );
+          }
+        },
+      },
+    ]
+  );
+};
+
+const getBudgetFor = (categoryId: number) =>
+  budgets.find((b) => b.category_id === categoryId);
 
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
@@ -142,25 +186,45 @@ export default function BudgetsScreen() {
         const existing = getBudgetFor(cat.id);
         return (
           <View key={cat.id} style={styles.row}>
-            <Text style={styles.categoryName}>{cat.name}</Text>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                placeholder="No limit"
-                value={inputs[cat.id] ?? ''}
-                onChangeText={(val) => setInputs((prev) => ({ ...prev, [cat.id]: val }))}
-              />
-              <TouchableOpacity style={styles.saveBtn} onPress={() => handleSave(cat.id)}>
-                <Text style={styles.saveBtnText}>Save</Text>
-              </TouchableOpacity>
-              {existing && (
-                <TouchableOpacity style={styles.removeBtn} onPress={() => handleRemove(cat.id)}>
-                  <Text style={styles.removeBtnText}>Remove</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+  <Text style={styles.categoryName}>{cat.name}</Text>
+
+  <View style={styles.inputRow}>
+    <TextInput
+      style={styles.input}
+      keyboardType="numeric"
+      placeholder="No limit"
+      value={inputs[cat.id] ?? ''}
+      onChangeText={(val) =>
+        setInputs((prev) => ({ ...prev, [cat.id]: val }))
+      }
+    />
+
+    <TouchableOpacity
+      style={styles.saveBtn}
+      onPress={() => handleSave(cat.id)}
+    >
+      <Text style={styles.saveBtnText}>Save</Text>
+    </TouchableOpacity>
+
+    {existing && (
+      <TouchableOpacity
+        style={styles.removeBtn}
+        onPress={() => handleRemove(cat.id)}
+      >
+        <Text style={styles.removeBtnText}>Remove</Text>
+      </TouchableOpacity>
+    )}
+
+    {!cat.is_default && (
+      <TouchableOpacity
+        style={styles.deleteCategoryBtn}
+        onPress={() => handleDeleteCategory(cat.id, cat.name)}
+      >
+        <Text style={styles.deleteCategoryText}>Delete</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+</View>
         );
       })}
     </ScrollView>
@@ -195,4 +259,16 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   removeBtn: { backgroundColor: '#fee2e2', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12 },
   removeBtnText: { color: '#d33', fontWeight: '600', fontSize: 13 },
+  deleteCategoryBtn: {
+  backgroundColor: '#dc2626',
+  borderRadius: 8,
+  paddingVertical: 10,
+  paddingHorizontal: 12,
+},
+
+deleteCategoryText: {
+  color: '#fff',
+  fontWeight: '600',
+  fontSize: 13,
+},
 });
