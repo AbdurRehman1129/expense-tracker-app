@@ -1,5 +1,6 @@
 import 'react-native-get-random-values';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { GoogleBackupProvider } from '@/contexts/GoogleBackupContext';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -58,6 +59,8 @@ export default function RootLayout() {
   }
 
   return (
+        <GoogleBackupProvider>
+
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -70,5 +73,7 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
+        </GoogleBackupProvider>
+
   );
 }

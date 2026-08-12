@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
-import { useGoogleBackup } from '@/hooks/useGoogleBackup';
+import { useGoogleBackup } from '@/contexts/GoogleBackupContext';
 import { getSetting, setSetting } from '@/db/settings';
 
 export default function BackupScreen() {
@@ -64,7 +64,9 @@ export default function BackupScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Google Account</Text>
-        {signedIn ? (
+        {authLoading ? (
+          <ActivityIndicator />
+        ) : signedIn ? (
           <>
             <Text style={styles.statusText}>✓ Signed in</Text>
             <TouchableOpacity style={styles.secondaryButton} onPress={signOut}>

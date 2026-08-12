@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
@@ -6,7 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { exportAllData, importAllData } from '@/db/backup';
 import { uploadBackup, downloadBackup, getBackupInfo } from '@/utils/googleDrive';
 import { deriveKey, encryptData, decryptData } from '@/utils/backupCrypto';
-import { setSetting, getSetting } from '@/db/settings';
+import { setSetting } from '@/db/settings';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -21,14 +21,27 @@ const discovery = {
 
 const REFRESH_TOKEN_KEY = 'google_refresh_token';
 
-export function useGoogleBackup() {
+interface GoogleBackupContextValue {
+  signedIn: boolean;
+  authLoading: boolean;
+  busy: boolean;
+  signIn: () => Promise<boolean>;
+  signOut: () => Promise<void>;
+  backupNow: () => Promise<{ success: boolean; message: string }>;
+  restoreNow: () => Promise<{ success: boolean; message: string }>;
+  checkRemoteBackupInfo: () => Promise<{ modifiedTime: string } | null>;
+}
+
+const GoogleBackupContext = createContext<GoogleBackupContextValue | null>(null);
+
+export function GoogleBackupProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [googleUserId, setGoogleUserId] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const androidClientPrefix = ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '');
-
   const redirectUri = AuthSession.makeRedirectUri({
     native: `com.googleusercontent.apps.${androidClientPrefix}:/oauth2redirect`,
   });
@@ -54,7 +67,10 @@ export function useGoogleBackup() {
 
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-    if (!refreshToken) return null;
+    if (!refreshToken) {
+      setAuthLoading(false);
+      return null;
+    }
 
     try {
       const tokenResult = await AuthSession.refreshAsync(
@@ -65,42 +81,54 @@ export function useGoogleBackup() {
       const uid = await fetchUserId(tokenResult.accessToken);
       setGoogleUserId(uid);
       setSignedIn(true);
+      setAuthLoading(false);
       return tokenResult.accessToken;
     } catch {
       await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
       setSignedIn(false);
+      setAuthLoading(false);
       return null;
     }
   }, [fetchUserId]);
 
-  // Try to restore session silently on mount
   useEffect(() => {
     refreshAccessToken();
   }, [refreshAccessToken]);
 
   const signIn = useCallback(async () => {
     if (!request) return false;
-    const result = await promptAsync();
-    if (result.type !== 'success' || !result.params.code) return false;
+    setAuthLoading(true);
+    try {
+      const result = await promptAsync();
+      if (result.type !== 'success' || !result.params.code) {
+        setAuthLoading(false);
+        return false;
+      }
 
-    const tokenResult = await AuthSession.exchangeCodeAsync(
-      {
-        clientId: ANDROID_CLIENT_ID,
-        code: result.params.code,
-        redirectUri,
-        extraParams: { code_verifier: request.codeVerifier ?? '' },
-      },
-      discovery
-    );
+      const tokenResult = await AuthSession.exchangeCodeAsync(
+        {
+          clientId: ANDROID_CLIENT_ID,
+          code: result.params.code,
+          redirectUri,
+          extraParams: { code_verifier: request.codeVerifier ?? '' },
+        },
+        discovery
+      );
 
-    setAccessToken(tokenResult.accessToken);
-    if (tokenResult.refreshToken) {
-      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokenResult.refreshToken);
+      setAccessToken(tokenResult.accessToken);
+      if (tokenResult.refreshToken) {
+        await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokenResult.refreshToken);
+      }
+      const uid = await fetchUserId(tokenResult.accessToken);
+      setGoogleUserId(uid);
+      setSignedIn(true);
+      setAuthLoading(false);
+      return true;
+    } catch (err) {
+      console.error('Sign in failed:', err);
+      setAuthLoading(false);
+      return false;
     }
-    const uid = await fetchUserId(tokenResult.accessToken);
-    setGoogleUserId(uid);
-    setSignedIn(true);
-    return true;
   }, [request, promptAsync, redirectUri, fetchUserId]);
 
   const signOut = useCallback(async () => {
@@ -157,13 +185,26 @@ export function useGoogleBackup() {
     return getBackupInfo(accessToken);
   }, [accessToken]);
 
-  return {
-    signedIn,
-    busy,
-    signIn,
-    signOut,
-    backupNow,
-    restoreNow,
-    checkRemoteBackupInfo,
-  };
+  return (
+    <GoogleBackupContext.Provider
+      value={{
+        signedIn,
+        authLoading,
+        busy,
+        signIn,
+        signOut,
+        backupNow,
+        restoreNow,
+        checkRemoteBackupInfo,
+      }}
+    >
+      {children}
+    </GoogleBackupContext.Provider>
+  );
+}
+
+export function useGoogleBackup() {
+  const ctx = useContext(GoogleBackupContext);
+  if (!ctx) throw new Error('useGoogleBackup must be used within GoogleBackupProvider');
+  return ctx;
 }
