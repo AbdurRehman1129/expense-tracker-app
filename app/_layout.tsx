@@ -65,6 +65,7 @@ export default function RootLayout() {
         <Stack.Screen name="donation-due" options={{ title: 'Log Donation' }} />
         <Stack.Screen name="budgets" options={{ title: 'Budgets' }} />
         <Stack.Screen name="recurring-expenses" options={{ title: 'Recurring Expenses' }} />
+        <Stack.Screen name="backup" options={{ title: 'Backup & Restore' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

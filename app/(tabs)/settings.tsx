@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform,
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
-
+import { router } from 'expo-router';
 import { getSetting, setSetting } from '@/db/settings';
 import { scheduleDailyReminder } from '@/utils/notifications';
 
@@ -158,6 +158,13 @@ export default function SettingsScreen() {
           If you haven&apos;t logged any Sadqa for the previous month by this day of the current
           month, you&apos;ll get a one-time reminder (checked whenever you open the app).
         </Text>
+      </View>
+      <Text style={styles.sectionTitle}>Cloud Backup</Text>
+      <View style={styles.card}>
+        <Text style={styles.hint}>Back up your data to Google Drive so you can restore it if you switch phones.</Text>
+        <TouchableOpacity style={styles.testButton} onPress={() => router.push('/backup')}>
+          <Text style={styles.testButtonText}>Manage Backup</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
