@@ -7,3 +7,13 @@ export function getMonthRange(): { start: string; end: string } {
     end: end.toISOString().split('T')[0],
   };
 }
+
+export function getYearRange(): { start: string; end: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const end = new Date(now.getFullYear(), 11, 31);
+  return {
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0],
+  };
+}

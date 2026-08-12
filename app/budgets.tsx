@@ -149,7 +149,7 @@ const getBudgetFor = (categoryId: number) =>
 
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.intro}>Set a monthly spending limit per category. You'll get a notification if you go over.</Text>
+      <Text style={styles.intro}>Set a monthly spending limit per category. You&apos;ll get a notification if you go over.</Text>
 
       {showAddCategory ? (
         <View style={styles.addCategoryBox}>

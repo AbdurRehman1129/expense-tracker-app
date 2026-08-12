@@ -90,3 +90,58 @@ export async function getExpensesByCategory(
     params
   );
 }
+
+/**
+ * Total expenses grouped by month (YYYY-MM), for the last `months` months
+ * including the current one. Months with no expenses are still included with total 0.
+ */
+export async function getMonthlyExpenseTrend(
+  months: number
+): Promise<{ month: string; total: number }[]> {
+  const db = await getDatabase();
+  const now = new Date();
+  const buckets: { month: string; total: number }[] = [];
+
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    buckets.push({ month: key, total: 0 });
+  }
+
+  const earliest = buckets[0].month;
+  const rows = await db.getAllAsync<{ month: string; total: number }>(
+    `SELECT strftime('%Y-%m', date) as month, SUM(amount) as total
+     FROM expenses
+     WHERE strftime('%Y-%m', date) >= ?
+     GROUP BY month`,
+    [earliest]
+  );
+
+  const rowMap = new Map(rows.map((r) => [r.month, r.total]));
+  return buckets.map((b) => ({ month: b.month, total: rowMap.get(b.month) ?? 0 }));
+}
+
+/** Full expense rows with category name, for CSV/PDF export. */
+export async function getExpenseRowsForExport(
+  startDate?: string,
+  endDate?: string
+): Promise<
+  { date: string; category_name: string; amount: number; payment_method: string | null; note: string | null; source: string }[]
+> {
+  const db = await getDatabase();
+  let query = `
+    SELECT e.date, c.name as category_name, e.amount, e.payment_method, e.note, e.source
+    FROM expenses e
+    JOIN categories c ON e.category_id = c.id
+  `;
+  const params: string[] = [];
+
+  if (startDate && endDate) {
+    query += ' WHERE e.date BETWEEN ? AND ?';
+    params.push(startDate, endDate);
+  }
+
+  query += ' ORDER BY e.date DESC';
+
+  return db.getAllAsync(query, params);
+}

@@ -46,3 +46,21 @@ export async function getTotalIncome(startDate?: string, endDate?: string): Prom
   const result = await db.getFirstAsync<{ total: number }>(query, params);
   return result?.total ?? 0;
 }
+
+/** Full income rows for CSV/PDF export. */
+export async function getIncomeRowsForExport(
+  startDate?: string,
+  endDate?: string
+): Promise<{ date: string; source: string | null; amount: number; note: string | null }[]> {
+  const db = await getDatabase();
+  let query = 'SELECT date, source, amount, note FROM income';
+  const params: string[] = [];
+
+  if (startDate && endDate) {
+    query += ' WHERE date BETWEEN ? AND ?';
+    params.push(startDate, endDate);
+  }
+
+  query += ' ORDER BY date DESC';
+  return db.getAllAsync(query, params);
+}
