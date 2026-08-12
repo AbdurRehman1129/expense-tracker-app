@@ -116,6 +116,7 @@ async function seedDefaults(db: Awaited<ReturnType<typeof getDatabase>>) {
     { key: 'reminder_time', value: '21:00' },
     { key: 'reminder_enabled', value: 'false' },
     { key: 'sadqa_reminder_enabled', value: 'false' },
+    { key: 'sadqa_reminder_day', value: '1' },
     { key: 'backup_enabled', value: 'false' },
   ];
 

@@ -20,7 +20,7 @@ import { addExpense, getAllExpenses, deleteExpense } from '@/db/expenses';
 import { Category, Expense } from '@/types';
 import ExpenseListItem from '@/components/ExpenseListItem';
 import { getBudgetForCategory } from '@/db/budgets';
-import { sendBudgetExceededNotification } from '@/utils/notifications';
+import { sendBudgetExceededNotification, scheduleDailyReminder } from '@/utils/notifications';
 import { getExpensesByCategory } from '@/db/expenses';
 import { getMonthRange } from '@/utils/dateRanges';
 
@@ -117,6 +117,7 @@ const handleSave = async () => {
     setDate(todayString());
 
     await loadData();
+    scheduleDailyReminder().catch((err) => console.error('Failed to reschedule reminder:', err));
 
     // Success popup
     Alert.alert('Success', 'Expense saved successfully!');
