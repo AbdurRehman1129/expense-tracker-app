@@ -96,7 +96,7 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>Daily Expense Reminder</Text>
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.rowLabel}>Enabled</Text>
+          <Text style={styles.rowLabel}>{reminderEnabled ? 'Enabled' : 'Disabled'}</Text>
           <Switch value={reminderEnabled} onValueChange={handleToggleReminder} />
         </View>
 
@@ -135,7 +135,7 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>Monthly Sadqa Reminder</Text>
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.rowLabel}>Enabled</Text>
+          <Text style={styles.rowLabel}>{sadqaReminderEnabled ? 'Enabled' : 'Disabled'}</Text>
           <Switch value={sadqaReminderEnabled} onValueChange={handleToggleSadqaReminder} />
         </View>
 
