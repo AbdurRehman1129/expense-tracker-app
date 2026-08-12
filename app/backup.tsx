@@ -6,8 +6,8 @@ import { useGoogleBackup } from '@/contexts/GoogleBackupContext';
 import { getSetting, setSetting } from '@/db/settings';
 
 export default function BackupScreen() {
-  const { signedIn, busy, signIn, signOut, backupNow, restoreNow, checkRemoteBackupInfo } =
-    useGoogleBackup();
+  const { signedIn, authLoading, busy, signIn, signOut, backupNow, restoreNow, checkRemoteBackupInfo } =
+  useGoogleBackup();
 
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);

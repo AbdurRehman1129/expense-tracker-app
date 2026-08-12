@@ -1,3 +1,4 @@
+import { getSetting, setSetting } from '@/db/settings';
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
@@ -6,7 +7,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { exportAllData, importAllData } from '@/db/backup';
 import { uploadBackup, downloadBackup, getBackupInfo } from '@/utils/googleDrive';
 import { deriveKey, encryptData, decryptData } from '@/utils/backupCrypto';
-import { setSetting } from '@/db/settings';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -184,6 +184,21 @@ export function GoogleBackupProvider({ children }: { children: ReactNode }) {
     if (!accessToken) return null;
     return getBackupInfo(accessToken);
   }, [accessToken]);
+  // Auto-backup once per day, but only after auth has resolved and the user is signed in.
+useEffect(() => {
+  if (authLoading || !signedIn) return;
+
+  (async () => {
+    const enabled = await getSetting('backup_enabled');
+    if (enabled !== 'true') return;
+
+    const last = await getSetting('last_backup_at');
+    const today = new Date().toISOString().split('T')[0];
+    if (last && last.startsWith(today)) return; // already backed up today
+
+    await backupNow();
+  })();
+}, [authLoading, signedIn, backupNow]);
 
   return (
     <GoogleBackupContext.Provider
