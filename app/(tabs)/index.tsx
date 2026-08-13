@@ -54,7 +54,6 @@ export default function DashboardScreen() {
     }, [mode, loadData])
   );
 
-  const balance = totalIncome - totalExpense;
 
   const chartData = categoryData.map((cat, index) => ({
     name: cat.category_name,
@@ -98,10 +97,6 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      <View style={[styles.balanceCard, { backgroundColor: balance >= 0 ? '#2563eb' : '#dc2626' }]}>
-        <Text style={styles.balanceLabel}>Balance</Text>
-        <Text style={styles.balanceAmount}>Rs {balance.toFixed(0)}</Text>
-      </View>
 
       <TouchableOpacity style={styles.incomeButton} onPress={() => router.push('/income')}>
         <Text style={styles.incomeButtonText}>+ Log Income</Text>
@@ -194,9 +189,6 @@ const styles = StyleSheet.create({
   mainCard: { flex: 1, borderRadius: 10, padding: 14, alignItems: 'center' },
   mainCardLabel: { color: '#fff', fontSize: 12 },
   mainCardAmount: { color: '#fff', fontSize: 20, fontWeight: '800', marginTop: 4 },
-  balanceCard: { margin: 16, borderRadius: 10, padding: 16, alignItems: 'center' },
-  balanceLabel: { color: '#fff', fontSize: 13 },
-  balanceAmount: { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 4 },
   incomeButton: {
     marginHorizontal: 16,
     backgroundColor: '#16a34a',
