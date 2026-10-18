@@ -1,30 +1,6 @@
 import { getDatabase } from './database';
 import { RecurringExpense, RecurringFrequency } from '../types';
-
-function todayString() {
-  return new Date().toISOString().split('T')[0];
-}
-
-function advanceDate(
-  dateStr: string,
-  frequency: RecurringFrequency
-): string {
-  const date = new Date(`${dateStr}T00:00:00`);
-
-  if (frequency === 'daily') {
-    date.setDate(date.getDate() + 1);
-  } else if (frequency === 'weekly') {
-    date.setDate(date.getDate() + 7);
-  } else if (frequency === 'monthly') {
-    date.setMonth(date.getMonth() + 1);
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
+import { todayString, advanceByFrequency, parseDateString } from '../utils/date';
 
 export async function getAllRecurringExpenses(): Promise<RecurringExpense[]> {
   const db = await getDatabase();
@@ -40,11 +16,13 @@ export async function addRecurringExpense(item: {
   payment_method?: string;
   note?: string;
   next_due_date: string;
+  /** Day of month the item was started on (1-31). Lets monthly items return to the 31st after February. */
+  anchor_day?: number;
 }): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync(
-    `INSERT INTO recurring_expenses (amount, category_id, frequency, payment_method, note, next_due_date, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, 1)`,
+    `INSERT INTO recurring_expenses (amount, category_id, frequency, payment_method, note, next_due_date, anchor_day, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
     [
       item.amount,
       item.category_id,
@@ -52,6 +30,7 @@ export async function addRecurringExpense(item: {
       item.payment_method ?? null,
       item.note ?? null,
       item.next_due_date,
+      item.anchor_day ?? parseDateString(item.next_due_date).getDate(),
     ]
   );
   return result.lastInsertRowId;
@@ -121,9 +100,13 @@ export async function markNotifiedToday(id: number): Promise<void> {
 
 export async function advanceNextDueDate(id: number, frequency: RecurringFrequency, fromDate: string): Promise<void> {
   const db = await getDatabase();
-  const newDate = advanceDate(fromDate, frequency);
+  const row = await db.getFirstAsync<{ anchor_day: number | null }>(
+    'SELECT anchor_day FROM recurring_expenses WHERE id = ?',
+    [id]
+  );
+  const newDate = advanceByFrequency(fromDate, frequency, row?.anchor_day);
   await db.runAsync(
     'UPDATE recurring_expenses SET next_due_date = ?, last_notified_date = NULL WHERE id = ?',
     [newDate, id]
   );
-}
+}

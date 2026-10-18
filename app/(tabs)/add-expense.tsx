@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react';
+import { useDateField } from '@/hooks/use-today';
+import { toDateString, parseDateString } from '@/utils/date';
 import {
   View,
   Text,
@@ -25,9 +27,6 @@ import { getExpensesByCategory } from '@/db/expenses';
 import { getMonthRange } from '@/utils/dateRanges';
 
 
-function todayString() {
-  return new Date().toISOString().split('T')[0];
-}
 
 export default function AddExpenseScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -35,7 +34,7 @@ export default function AddExpenseScreen() {
 
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [date, setDate] = useState(todayString());
+  const { date, setDate, reset: resetDate } = useDateField();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [note, setNote] = useState('');
@@ -114,7 +113,7 @@ const handleSave = async () => {
     // Clear form
     setAmount('');
     setNote('');
-    setDate(todayString());
+    resetDate();
 
     await loadData();
     scheduleDailyReminder().catch((err) => console.error('Failed to reschedule reminder:', err));
@@ -218,13 +217,13 @@ const handleSave = async () => {
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
-            value={new Date(date)}
+            value={parseDateString(date)}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
               setShowDatePicker(false);
               if (selectedDate) {
-                setDate(selectedDate.toISOString().split('T')[0]);
+                setDate(toDateString(selectedDate));
               }
             }}
           />
@@ -330,4 +329,4 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
   empty: { textAlign: 'center', color: '#999', marginTop: 20 },
   recurringLink: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginBottom: 8 },
-});
+});

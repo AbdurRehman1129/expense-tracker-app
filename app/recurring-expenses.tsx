@@ -23,36 +23,13 @@ import {
   togglePause,
 } from '@/db/recurringExpenses';
 import { Category, RecurringExpense, RecurringFrequency } from '@/types';
+import { advanceByFrequency, parseDateString, todayString } from '@/utils/date';
 
-function todayString() {
-  const date = new Date();
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
+function calculateNextDueDate(startDate: string, frequency: RecurringFrequency) {
+  // Month-end safe: Jan 31 + 1 month = Feb 28/29 (not Mar 3).
+  return advanceByFrequency(startDate, frequency);
 }
-function calculateNextDueDate(
-  startDate: string,
-  frequency: RecurringFrequency
-) {
-  const date = new Date(`${startDate}T00:00:00`);
 
-  if (frequency === 'daily') {
-    date.setDate(date.getDate() + 1);
-  } else if (frequency === 'weekly') {
-    date.setDate(date.getDate() + 7);
-  } else if (frequency === 'monthly') {
-    date.setMonth(date.getMonth() + 1);
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
 export default function RecurringExpensesScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<RecurringExpense[]>([]);
@@ -132,6 +109,7 @@ const handleFrequencyChange = (
       category_id: categoryId,
       frequency,
       next_due_date: nextDueDate,
+      anchor_day: parseDateString(startDate).getDate(),
       note: note.trim() || undefined,
     });
 
@@ -257,7 +235,7 @@ await loadData();
 </View>
         {showDatePicker && (
   <DateTimePicker
-    value={new Date(`${startDate}T00:00:00`)}
+    value={parseDateString(startDate)}
     mode="date"
     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
     onChange={(event, selectedDate) => {
@@ -341,4 +319,4 @@ const styles = StyleSheet.create({
   itemNote: { fontSize: 12, color: '#888', marginTop: 2 },
   itemActions: { alignItems: 'center', gap: 8 },
   deleteText: { fontSize: 12, color: '#d33' },
-});
+});

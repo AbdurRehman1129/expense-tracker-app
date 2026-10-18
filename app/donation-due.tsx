@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useDateField } from '@/hooks/use-today';
+import { toDateString, parseDateString } from '@/utils/date';
 import {
   View,
   Text,
@@ -20,9 +22,6 @@ import { addDonationDue, getAllDonationDues, deleteDonationDue, getDueTotals } f
 import { getSetting, setSetting } from '@/db/settings';
 import { Income, DonationDue, DonationType } from '@/types';
 
-function todayString() {
-  return new Date().toISOString().split('T')[0];
-}
 
 const TYPES: { key: DonationType; label: string }[] = [
   { key: 'zakat', label: 'Zakat' },
@@ -39,7 +38,7 @@ export default function DonationDueScreen() {
   const [percentage, setPercentage] = useState('');
   const [dueAmount, setDueAmount] = useState('');
   const [percentageLocked, setPercentageLocked] = useState(false);
-  const [date, setDate] = useState(todayString());
+  const { date, setDate, reset: resetDate } = useDateField();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [note, setNote] = useState('');
   const [showIncomePicker, setShowIncomePicker] = useState(false);
@@ -136,7 +135,7 @@ export default function DonationDueScreen() {
     setIncomeAmount('');
     setDueAmount('');
     setNote('');
-    setDate(todayString());
+    resetDate();
     setLinkedIncomeId(null);
 
     await loadData();
@@ -255,12 +254,12 @@ export default function DonationDueScreen() {
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
-            value={new Date(date)}
+            value={parseDateString(date)}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
               setShowDatePicker(false);
-              if (selectedDate) setDate(selectedDate.toISOString().split('T')[0]);
+              if (selectedDate) setDate(toDateString(selectedDate));
             }}
           />
         )}
@@ -356,4 +355,4 @@ const styles = StyleSheet.create({
   modalRowDate: { fontSize: 12, color: '#666', marginTop: 2 },
   modalClose: { marginTop: 12, alignItems: 'center', padding: 10 },
   modalCloseText: { color: '#2563eb', fontWeight: '600' },
-});
+});

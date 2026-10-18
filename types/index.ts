@@ -66,7 +66,9 @@ export interface RecurringExpense {
   payment_method: string | null;
   note: string | null;
   next_due_date: string;
+  /** Day of month (1-31) the item started on; used to clamp month-ends. May be null on older rows. */
+  anchor_day: number | null;
   last_notified_date: string | null;
   is_active: number;
   created_at: string;
-}
+}

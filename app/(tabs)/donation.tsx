@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react';
+import { useDateField } from '@/hooks/use-today';
+import { toDateString, parseDateString } from '@/utils/date';
 import {
   View,
   Text,
@@ -18,9 +20,6 @@ import { getDueTotals } from '@/db/donationDues';
 import { Donation, DonationType } from '@/types';
 import DonationListItem from '@/components/DonationListItem';
 
-function todayString() {
-  return new Date().toISOString().split('T')[0];
-}
 
 const TYPES: { key: DonationType; label: string }[] = [
   { key: 'zakat', label: 'Zakat' },
@@ -41,7 +40,7 @@ export default function DonationScreen() {
   const [type, setType] = useState<DonationType>('sadqa');
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
-  const [date, setDate] = useState(todayString());
+  const { date, setDate, reset: resetDate } = useDateField();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [note, setNote] = useState('');
 
@@ -102,7 +101,7 @@ export default function DonationScreen() {
     setAmount('');
     setRecipient('');
     setNote('');
-    setDate(todayString());
+    resetDate();
 
     await loadData();
 
@@ -223,12 +222,12 @@ export default function DonationScreen() {
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
-            value={new Date(date)}
+            value={parseDateString(date)}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
               setShowDatePicker(false);
-              if (selectedDate) setDate(selectedDate.toISOString().split('T')[0]);
+              if (selectedDate) setDate(toDateString(selectedDate));
             }}
           />
         )}
@@ -283,4 +282,4 @@ const styles = StyleSheet.create({
   saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   empty: { textAlign: 'center', color: '#999', marginTop: 10, marginBottom: 20 },
-});
+});

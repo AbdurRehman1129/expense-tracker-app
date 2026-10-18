@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react';
+import { useDateField } from '@/hooks/use-today';
+import { toDateString, parseDateString } from '@/utils/date';
 import {
   View,
   Text,
@@ -17,16 +19,13 @@ import { addIncome, getAllIncome, deleteIncome } from '@/db/income';
 import { Income } from '@/types';
 import IncomeListItem from '@/components/IncomeListItem';
 
-function todayString() {
-  return new Date().toISOString().split('T')[0];
-}
 
 export default function IncomeScreen() {
   const [incomeList, setIncomeList] = useState<Income[]>([]);
 
   const [amount, setAmount] = useState('');
   const [source, setSource] = useState('');
-  const [date, setDate] = useState(todayString());
+  const { date, setDate, reset: resetDate } = useDateField();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [note, setNote] = useState('');
 
@@ -65,7 +64,7 @@ export default function IncomeScreen() {
     setAmount('');
     setSource('');
     setNote('');
-    setDate(todayString());
+    resetDate();
 
     await loadData();
 
@@ -141,13 +140,13 @@ export default function IncomeScreen() {
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
-            value={new Date(date)}
+            value={parseDateString(date)}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(event, selectedDate) => {
               setShowDatePicker(false);
               if (selectedDate) {
-                setDate(selectedDate.toISOString().split('T')[0]);
+                setDate(toDateString(selectedDate));
               }
             }}
           />
@@ -206,4 +205,4 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
   empty: { textAlign: 'center', color: '#999', marginTop: 20 },
-});
+});

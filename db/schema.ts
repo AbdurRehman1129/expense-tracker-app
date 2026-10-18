@@ -84,7 +84,23 @@ export async function initDatabase() {
     );
   `);
 
+  await ensureColumn(db, 'recurring_expenses', 'anchor_day', 'INTEGER');
+
   await seedDefaults(db);
+}
+
+// Adds a column only if it is missing, so it is safe on fresh installs and upgrades.
+// (Phase 3 replaces this with a proper versioned migration framework.)
+async function ensureColumn(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  table: string,
+  column: string,
+  definition: string
+) {
+  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (!columns.some((c) => c.name === column)) {
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 async function seedDefaults(db: Awaited<ReturnType<typeof getDatabase>>) {
@@ -126,4 +142,4 @@ async function seedDefaults(db: Awaited<ReturnType<typeof getDatabase>>) {
       [setting.key, setting.value]
     );
   }
-}
+}

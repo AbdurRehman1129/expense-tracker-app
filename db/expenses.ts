@@ -1,5 +1,6 @@
 import { getDatabase } from './database';
 import { Expense } from '../types';
+import { todayString } from '../utils/date';
 
 export async function getAllExpenses(): Promise<Expense[]> {
   const db = await getDatabase();
@@ -52,16 +53,12 @@ export async function deleteExpense(id: number): Promise<void> {
   }
 }
 
-function todayStringForCheck() {
-  return new Date().toISOString().split('T')[0];
-}
-
 /** Whether at least one expense has already been logged today (any category, manual or donation). */
 export async function hasExpenseLoggedToday(): Promise<boolean> {
   const db = await getDatabase();
   const result = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM expenses WHERE date = ?',
-    [todayStringForCheck()]
+    [todayString()]
   );
   return (result?.count ?? 0) > 0;
 }
@@ -158,4 +155,4 @@ export async function getExpenseRowsForExport(
   query += ' ORDER BY e.date DESC';
 
   return db.getAllAsync(query, params);
-}
+}

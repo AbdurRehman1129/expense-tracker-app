@@ -1,4 +1,5 @@
 import { getSetting, setSetting } from '@/db/settings';
+import { todayString } from '@/utils/date';
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
@@ -149,6 +150,7 @@ export function GoogleBackupProvider({ children }: { children: ReactNode }) {
       const encrypted = encryptData(json, key);
       await uploadBackup(accessToken, encrypted);
       await setSetting('last_backup_at', new Date().toISOString());
+      await setSetting('last_backup_day', todayString());
       return { success: true, message: 'Backup completed successfully.' };
     } catch (err) {
       console.error('Backup failed:', err);
@@ -192,9 +194,9 @@ useEffect(() => {
     const enabled = await getSetting('backup_enabled');
     if (enabled !== 'true') return;
 
-    const last = await getSetting('last_backup_at');
-    const today = new Date().toISOString().split('T')[0];
-    if (last && last.startsWith(today)) return; // already backed up today
+    // Compare LOCAL calendar days (the old UTC check could run twice or skip a day).
+    const lastDay = await getSetting('last_backup_day');
+    if (lastDay === todayString()) return; // already backed up today
 
     await backupNow();
   })();
@@ -222,4 +224,4 @@ export function useGoogleBackup() {
   const ctx = useContext(GoogleBackupContext);
   if (!ctx) throw new Error('useGoogleBackup must be used within GoogleBackupProvider');
   return ctx;
-}
+}
