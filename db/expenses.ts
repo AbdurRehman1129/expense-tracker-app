@@ -1,10 +1,15 @@
-import { getDatabase } from './database';
+import { getDatabase, runInTransaction } from './database';
 import { Expense } from '../types';
 import { todayString } from '../utils/date';
 
 export async function getAllExpenses(): Promise<Expense[]> {
   const db = await getDatabase();
   return db.getAllAsync<Expense>('SELECT * FROM expenses ORDER BY date DESC');
+}
+
+export async function getExpenseById(id: number): Promise<Expense | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<Expense>('SELECT * FROM expenses WHERE id = ?', [id]);
 }
 
 export async function addExpense(expense: {
@@ -33,24 +38,86 @@ export async function addExpense(expense: {
   return result.lastInsertRowId;
 }
 
+/**
+ * Updates only the fields you pass; everything else keeps its current value.
+ * (The old version wrote NULL into every field you did not pass.)
+ */
 export async function updateExpense(id: number, updates: Partial<Expense>): Promise<void> {
   const db = await getDatabase();
+  const existing = await db.getFirstAsync<Expense>('SELECT * FROM expenses WHERE id = ?', [id]);
+  if (!existing) return;
+
+  const pick = <K extends keyof Expense>(key: K): Expense[K] =>
+    (updates[key] !== undefined ? updates[key] : existing[key]) as Expense[K];
+
   await db.runAsync(
-    `UPDATE expenses SET amount = ?, category_id = ?, date = ?, note = ?, payment_method = ? WHERE id = ?`,
-    [updates.amount ?? null, updates.category_id ?? null, updates.date ?? null, updates.note ?? null, updates.payment_method ?? null, id, ]
+    `UPDATE expenses
+     SET amount = ?, category_id = ?, date = ?, note = ?, payment_method = ?, updated_at = ?
+     WHERE id = ?`,
+    [
+      pick('amount'),
+      pick('category_id'),
+      pick('date'),
+      pick('note'),
+      pick('payment_method'),
+      new Date().toISOString(),
+      id,
+    ]
   );
 }
 
+/** Deletes an expense; if it belongs to a donation, that donation goes with it (all-or-nothing). */
 export async function deleteExpense(id: number): Promise<void> {
+  await runInTransaction(async () => {
+    const db = await getDatabase();
+    const expense = await db.getFirstAsync<{ linked_donation_id: number | null }>(
+      'SELECT linked_donation_id FROM expenses WHERE id = ?',
+      [id]
+    );
+    // The donation points at this expense, so remove the donation first.
+    if (expense?.linked_donation_id) {
+      await db.runAsync('DELETE FROM donations WHERE id = ?', [expense.linked_donation_id]);
+    }
+    await db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);
+  });
+}
+
+export type ExpensePageOptions = {
+  limit?: number;
+  offset?: number;
+  categoryId?: number;
+  /** Inclusive range, both required to apply. */
+  start?: string;
+  end?: string;
+  /** Matches the note or payment method. */
+  search?: string;
+};
+
+/** A page of expenses (newest first) for long lists. */
+export async function getExpensesPage(options: ExpensePageOptions = {}): Promise<Expense[]> {
   const db = await getDatabase();
-  const expense = await db.getFirstAsync<{ linked_donation_id: number | null }>(
-    'SELECT linked_donation_id FROM expenses WHERE id = ?',
-    [id]
-  );
-  await db.runAsync('DELETE FROM expenses WHERE id = ?', [id]);
-  if (expense?.linked_donation_id) {
-    await db.runAsync('DELETE FROM donations WHERE id = ?', [expense.linked_donation_id]);
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (options.categoryId !== undefined) {
+    where.push('category_id = ?');
+    params.push(options.categoryId);
   }
+  if (options.start && options.end) {
+    where.push('date BETWEEN ? AND ?');
+    params.push(options.start, options.end);
+  }
+  const search = options.search?.trim();
+  if (search) {
+    where.push('(note LIKE ? OR payment_method LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const sql =
+    `SELECT * FROM expenses${where.length ? ' WHERE ' + where.join(' AND ') : ''} ` +
+    'ORDER BY date DESC, id DESC LIMIT ? OFFSET ?';
+  params.push(options.limit ?? 50, options.offset ?? 0);
+  return db.getAllAsync<Expense>(sql, params);
 }
 
 /** Whether at least one expense has already been logged today (any category, manual or donation). */

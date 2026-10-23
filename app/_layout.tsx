@@ -1,15 +1,28 @@
 import 'react-native-get-random-values';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  Theme,
+  ThemeProvider as NavigationThemeProvider,
+} from '@react-navigation/native';
 import { GoogleBackupProvider } from '@/contexts/GoogleBackupContext';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDatabase } from '@/db/schema';
+import { getSetting } from '@/db/settings';
+import {
+  AppThemeProvider,
+  ThemePreference,
+  isThemePreference,
+  useTheme,
+} from '@/contexts/ThemeContext';
 import {
   requestNotificationPermissions,
   registerNotificationCategories,
@@ -24,12 +37,18 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const systemScheme = useColorScheme();
   const [dbReady, setDbReady] = useState(false);
+  const [themePreference, setThemePreference] = useState<ThemePreference>('system');
 
   useEffect(() => {
     initDatabase()
-      .then(() => setDbReady(true))
+      .then(async () => {
+        // Read the saved theme in the same step, so the first real frame is already correct.
+        const saved = await getSetting('theme_preference');
+        if (isThemePreference(saved)) setThemePreference(saved);
+        setDbReady(true);
+      })
       .then(() => registerNotificationCategories())
       .then(() => scheduleDailyReminder())
       .then(() => checkAndPromptRecurringExpenses())
@@ -52,16 +71,47 @@ export default function RootLayout() {
 
   if (!dbReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: systemScheme === 'dark' ? '#0B0F14' : '#FFFFFF',
+        }}
+      >
         <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
+    <AppThemeProvider initialPreference={themePreference}>
+      <KeyboardProvider>
         <GoogleBackupProvider>
+          <ThemedNavigation />
+        </GoogleBackupProvider>
+      </KeyboardProvider>
+    </AppThemeProvider>
+  );
+}
 
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+function ThemedNavigation() {
+  const { colors, scheme } = useTheme();
+
+  const navigationTheme: Theme = {
+    ...(scheme === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      primary: colors.primary,
+      background: colors.background,
+      card: colors.card,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.danger,
+    },
+  };
+
+  return (
+    <NavigationThemeProvider value={navigationTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
@@ -70,10 +120,14 @@ export default function RootLayout() {
         <Stack.Screen name="budgets" options={{ title: 'Budgets' }} />
         <Stack.Screen name="recurring-expenses" options={{ title: 'Recurring Expenses' }} />
         <Stack.Screen name="backup" options={{ title: 'Backup & Restore' }} />
+        <Stack.Screen name="history" options={{ title: 'History' }} />
+        <Stack.Screen name="edit/expense/[id]" options={{ title: 'Edit Expense' }} />
+        <Stack.Screen name="edit/income/[id]" options={{ title: 'Edit Income' }} />
+        <Stack.Screen name="edit/donation/[id]" options={{ title: 'Edit Donation' }} />
+        <Stack.Screen name="edit/due/[id]" options={{ title: 'Edit Pledge' }} />
+        <Stack.Screen name="edit/recurring/[id]" options={{ title: 'Edit Recurring Expense' }} />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
-        </GoogleBackupProvider>
-
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+    </NavigationThemeProvider>
   );
 }

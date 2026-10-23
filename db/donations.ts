@@ -1,7 +1,9 @@
-import { getDatabase } from './database';
+import { getDatabase, runInTransaction } from './database';
 import { Donation, DonationType } from '../types';
-import { addExpense, deleteExpense, updateExpense } from './expenses';
-import { reduceDueAmount, restoreDueAmount } from './donationDues';
+import { addExpense, updateExpense } from './expenses';
+import { getRawRemaining } from './donationDues';
+import { DbError } from './errors';
+import { round2, toCents } from '../utils/money';
 
 const DONATION_CATEGORY_NAME = 'Donation';
 
@@ -15,11 +17,70 @@ async function getDonationCategoryId(): Promise<number> {
   return cat.id;
 }
 
-export async function getAllDonations(): Promise<Donation[]> {
-  const db = await getDatabase();
-  return db.getAllAsync<Donation>('SELECT * FROM donations ORDER BY date DESC');
+function expenseNote(type: DonationType, recipient: string | null | undefined): string {
+  return `${type} donation${recipient ? ' to ' + recipient : ''}`;
 }
 
+function insufficient(remaining: number): DbError {
+  return new DbError(
+    'INSUFFICIENT_DUE',
+    'This donation is more than what is left to donate.',
+    { remaining: round2(Math.max(0, remaining)) }
+  );
+}
+
+export async function getAllDonations(): Promise<Donation[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<Donation>('SELECT * FROM donations ORDER BY date DESC, id DESC');
+}
+
+export async function getDonationById(id: number): Promise<Donation | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<Donation>('SELECT * FROM donations WHERE id = ?', [id]);
+}
+
+export type DonationPageOptions = {
+  limit?: number;
+  offset?: number;
+  type?: DonationType;
+  /** Inclusive range, both required to apply. */
+  start?: string;
+  end?: string;
+  /** Matches the recipient or note. */
+  search?: string;
+};
+
+/** A page of donations (newest first) for long lists. */
+export async function getDonationsPage(options: DonationPageOptions = {}): Promise<Donation[]> {
+  const db = await getDatabase();
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (options.type) {
+    where.push('type = ?');
+    params.push(options.type);
+  }
+  if (options.start && options.end) {
+    where.push('date BETWEEN ? AND ?');
+    params.push(options.start, options.end);
+  }
+  const search = options.search?.trim();
+  if (search) {
+    where.push('(recipient LIKE ? OR note LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const sql =
+    `SELECT * FROM donations${where.length ? ' WHERE ' + where.join(' AND ') : ''} ` +
+    'ORDER BY date DESC, id DESC LIMIT ? OFFSET ?';
+  params.push(options.limit ?? 50, options.offset ?? 0);
+  return db.getAllAsync<Donation>(sql, params);
+}
+
+/**
+ * Records a donation AND its linked expense in one all-or-nothing step.
+ * Throws DbError('INSUFFICIENT_DUE') if it exceeds what is left to donate.
+ */
 export async function addDonation(donation: {
   type: DonationType;
   recipient?: string;
@@ -28,93 +89,94 @@ export async function addDonation(donation: {
   note?: string;
   linked_income_id?: number;
 }): Promise<number> {
-  const db = await getDatabase();
   const categoryId = await getDonationCategoryId();
 
-  // Create linked expense first
-  const expenseId = await addExpense({
-    amount: donation.amount,
-    category_id: categoryId,
-    date: donation.date,
-    note: `${donation.type} donation${donation.recipient ? ' to ' + donation.recipient : ''}`,
-    source: 'donation',
-  });
+  return runInTransaction(async () => {
+    const db = await getDatabase();
 
-  const result = await db.runAsync(
-    `INSERT INTO donations (type, recipient, amount, date, note, linked_income_id, linked_expense_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      donation.type,
-      donation.recipient ?? null,
-      donation.amount,
-      donation.date,
-      donation.note ?? null,
-      donation.linked_income_id ?? null,
-      expenseId,
-    ]
-  );
+    const remaining = await getRawRemaining(donation.type);
+    if (toCents(donation.amount) > toCents(remaining)) throw insufficient(remaining);
 
-  // Link the expense back to this donation
-  await db.runAsync('UPDATE expenses SET linked_donation_id = ? WHERE id = ?', [
-    result.lastInsertRowId,
-    expenseId,
-  ]);
-
-  // Subtract this donation from "To Be Donated" (consumes oldest due entries first)
-  await reduceDueAmount(donation.type, donation.amount);
-
-  return result.lastInsertRowId;
-}
-
-export async function updateDonation(id: number, updates: Partial<Donation>): Promise<void> {
-  const db = await getDatabase();
-  const donation = await db.getFirstAsync<Donation>('SELECT * FROM donations WHERE id = ?', [id]);
-  if (!donation) return;
-
-  const newType = updates.type ?? donation.type;
-  const newAmount = updates.amount ?? donation.amount;
-
-  await db.runAsync(
-    'UPDATE donations SET type = ?, recipient = ?, amount = ?, date = ?, note = ? WHERE id = ?',
-    [
-      newType,
-      updates.recipient ?? donation.recipient,
-      newAmount,
-      updates.date ?? donation.date,
-      updates.note ?? donation.note,
-      id,
-    ]
-  );
-
-  // Keep linked expense in sync
-  if (donation.linked_expense_id) {
-    await updateExpense(donation.linked_expense_id, {
-      amount: newAmount,
-      date: updates.date ?? donation.date,
-      note: `${newType} donation${(updates.recipient ?? donation.recipient) ? ' to ' + (updates.recipient ?? donation.recipient) : ''}`,
+    const expenseId = await addExpense({
+      amount: donation.amount,
+      category_id: categoryId,
+      date: donation.date,
+      note: expenseNote(donation.type, donation.recipient),
+      source: 'donation',
     });
-  }
 
-  // If the type or amount changed, undo the old consumption and re-apply with new values
-  if (newType !== donation.type || newAmount !== donation.amount) {
-    await restoreDueAmount(donation.type, donation.amount, donation.date, 'Restored (donation edited)');
-    await reduceDueAmount(newType, newAmount);
-  }
+    const result = await db.runAsync(
+      `INSERT INTO donations (type, recipient, amount, date, note, linked_income_id, linked_expense_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        donation.type,
+        donation.recipient ?? null,
+        donation.amount,
+        donation.date,
+        donation.note ?? null,
+        donation.linked_income_id ?? null,
+        expenseId,
+      ]
+    );
+
+    await db.runAsync('UPDATE expenses SET linked_donation_id = ? WHERE id = ?', [
+      result.lastInsertRowId,
+      expenseId,
+    ]);
+
+    return result.lastInsertRowId;
+  });
 }
 
+/**
+ * Edits a donation and keeps its linked expense in sync (the expense keeps its
+ * category). Fields you don't pass are left unchanged.
+ * Throws DbError('INSUFFICIENT_DUE') if the new amount/type doesn't fit.
+ */
+export async function updateDonation(id: number, updates: Partial<Donation>): Promise<void> {
+  await runInTransaction(async () => {
+    const db = await getDatabase();
+    const existing = await db.getFirstAsync<Donation>('SELECT * FROM donations WHERE id = ?', [id]);
+    if (!existing) return;
+
+    const type = updates.type ?? existing.type;
+    const amount = updates.amount ?? existing.amount;
+    const recipient = updates.recipient !== undefined ? updates.recipient : existing.recipient;
+    const date = updates.date ?? existing.date;
+    const note = updates.note !== undefined ? updates.note : existing.note;
+
+    // Room available = what is left, plus this donation's own old amount if it stays in the same type.
+    const room = (await getRawRemaining(type)) + (type === existing.type ? existing.amount : 0);
+    if (toCents(amount) > toCents(room)) throw insufficient(room);
+
+    await db.runAsync(
+      `UPDATE donations SET type = ?, recipient = ?, amount = ?, date = ?, note = ?, updated_at = ? WHERE id = ?`,
+      [type, recipient, amount, date, note, new Date().toISOString(), id]
+    );
+
+    if (existing.linked_expense_id) {
+      await updateExpense(existing.linked_expense_id, {
+        amount,
+        date,
+        note: expenseNote(type, recipient),
+      });
+    }
+  });
+}
+
+/** Deletes a donation and its linked expense together. */
 export async function deleteDonation(id: number): Promise<void> {
-  const db = await getDatabase();
-  const donation = await db.getFirstAsync<Donation>('SELECT * FROM donations WHERE id = ?', [id]);
-  if (!donation) return;
+  await runInTransaction(async () => {
+    const db = await getDatabase();
+    const donation = await db.getFirstAsync<Donation>('SELECT * FROM donations WHERE id = ?', [id]);
+    if (!donation) return;
 
-  if (donation.linked_expense_id) {
-    await deleteExpense(donation.linked_expense_id);
-  }
-
-  // Give the donated amount back to "To Be Donated"
-  await restoreDueAmount(donation.type, donation.amount, donation.date, 'Restored (donation deleted)');
-
-  await db.runAsync('DELETE FROM donations WHERE id = ?', [id]);
+    // The donation points at its expense, so remove the donation first.
+    await db.runAsync('DELETE FROM donations WHERE id = ?', [id]);
+    if (donation.linked_expense_id) {
+      await db.runAsync('DELETE FROM expenses WHERE id = ?', [donation.linked_expense_id]);
+    }
+  });
 }
 
 export async function getDonationTotals(

@@ -1,27 +1,22 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useDateField } from '@/hooks/use-today';
 import { toDateString, parseDateString } from '@/utils/date';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Alert,
-  Modal,
-  FlatList,
-  Keyboard,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Modal, FlatList, Keyboard } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
 
 import { getAllIncome } from '@/db/income';
-import { addDonationDue, getAllDonationDues, deleteDonationDue, getDueTotals } from '@/db/donationDues';
+import { addDonationDue, getAllDonationDues, deleteDonationDue, getRemaining, isMigrationDue } from '@/db/donationDues';
+import { isDbError } from '@/db/errors';
+import { openDueEditor } from '@/utils/navigation';
 import { getSetting, setSetting } from '@/db/settings';
 import { Income, DonationDue, DonationType } from '@/types';
-
+import { AppText } from '@/components/ui/AppText';
+import { TextField } from '@/components/ui/TextField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
+import { useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
+import { formatMoney } from '@/utils/money';
 
 const TYPES: { key: DonationType; label: string }[] = [
   { key: 'zakat', label: 'Zakat' },
@@ -29,6 +24,7 @@ const TYPES: { key: DonationType; label: string }[] = [
 ];
 
 export default function DonationDueScreen() {
+  const styles = useThemedStyles(makeStyles);
   const [dues, setDues] = useState<DonationDue[]>([]);
   const [incomeList, setIncomeList] = useState<Income[]>([]);
   const [totals, setTotals] = useState({ zakat: 0, sadqa: 0 });
@@ -51,8 +47,8 @@ export default function DonationDueScreen() {
     const income = await getAllIncome();
     setIncomeList(income);
 
-    const zakatTotal = await getDueTotals('zakat');
-    const sadqaTotal = await getDueTotals('sadqa');
+    const zakatTotal = await getRemaining('zakat');
+    const sadqaTotal = await getRemaining('sadqa');
     setTotals({ zakat: zakatTotal, sadqa: sadqaTotal });
   }, []);
 
@@ -167,6 +163,14 @@ export default function DonationDueScreen() {
 
           Alert.alert('Success', 'Donation due deleted successfully!');
         } catch (error) {
+          if (isDbError(error, 'DUE_IN_USE')) {
+            Alert.alert(
+              "Can't delete this pledge",
+              `${formatMoney(error.details.shortBy)} of it has already been donated. ` +
+                'Delete or reduce the matching donations first.'
+            );
+            return;
+          }
           console.error('Failed to delete donation due:', error);
 
           Alert.alert(
@@ -180,20 +184,20 @@ export default function DonationDueScreen() {
 };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <FormScrollView style={styles.container}>
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, { backgroundColor: '#7c3aed' }]}>
-          <Text style={styles.summaryLabel}>Zakat Due (Total)</Text>
-          <Text style={styles.summaryAmount}>Rs {totals.zakat.toFixed(0)}</Text>
+          <AppText style={styles.summaryLabel}>Zakat To Be Donated</AppText>
+          <AppText style={styles.summaryAmount}>{formatMoney(totals.zakat)}</AppText>
         </View>
         <View style={[styles.summaryCard, { backgroundColor: '#0891b2' }]}>
-          <Text style={styles.summaryLabel}>Sadqa Due (Total)</Text>
-          <Text style={styles.summaryAmount}>Rs {totals.sadqa.toFixed(0)}</Text>
+          <AppText style={styles.summaryLabel}>Sadqa To Be Donated</AppText>
+          <AppText style={styles.summaryAmount}>{formatMoney(totals.sadqa)}</AppText>
         </View>
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.label}>Type</Text>
+        <AppText style={styles.label}>Type</AppText>
         <View style={styles.typeSelector}>
           {TYPES.map((t) => (
             <TouchableOpacity
@@ -201,20 +205,20 @@ export default function DonationDueScreen() {
               style={[styles.typeButton, type === t.key && styles.typeButtonActive]}
               onPress={() => applyType(t.key)}
             >
-              <Text style={[styles.typeButtonText, type === t.key && styles.typeButtonTextActive]}>
+              <AppText style={[styles.typeButtonText, type === t.key && styles.typeButtonTextActive]}>
                 {t.label}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           ))}
         </View>
 
         <View style={styles.rowBetween}>
-          <Text style={styles.label}>Income Amount</Text>
+          <AppText style={styles.label}>Income Amount</AppText>
           <TouchableOpacity onPress={() => setShowIncomePicker(true)}>
-            <Text style={styles.linkText}>Pick from logged income</Text>
+            <AppText style={styles.linkText}>Pick from logged income</AppText>
           </TouchableOpacity>
         </View>
-        <TextInput
+        <TextField
           style={styles.input}
           keyboardType="numeric"
           placeholder="0"
@@ -223,14 +227,14 @@ export default function DonationDueScreen() {
         />
 
         <View style={styles.rowBetween}>
-          <Text style={styles.label}>Percentage {type === 'zakat' ? '(standard 2.5%)' : ''}</Text>
+          <AppText style={styles.label}>Percentage {type === 'zakat' ? '(standard 2.5%)' : ''}</AppText>
           {type === 'zakat' && (
             <TouchableOpacity onPress={() => setPercentageLocked(!percentageLocked)}>
-              <Text style={styles.linkText}>{percentageLocked ? 'Unlock' : 'Lock'}</Text>
+              <AppText style={styles.linkText}>{percentageLocked ? 'Unlock' : 'Lock'}</AppText>
             </TouchableOpacity>
           )}
         </View>
-        <TextInput
+        <TextField
           style={[styles.input, type === 'zakat' && percentageLocked && styles.inputDisabled]}
           keyboardType="numeric"
           placeholder="0"
@@ -239,8 +243,8 @@ export default function DonationDueScreen() {
           editable={!(type === 'zakat' && percentageLocked)}
         />
 
-        <Text style={styles.label}>Amount To Be Donated</Text>
-        <TextInput
+        <AppText style={styles.label}>Amount To Be Donated</AppText>
+        <TextField
           style={styles.input}
           keyboardType="numeric"
           placeholder="0"
@@ -248,9 +252,9 @@ export default function DonationDueScreen() {
           onChangeText={setDueAmount}
         />
 
-        <Text style={styles.label}>Date</Text>
+        <AppText style={styles.label}>Date</AppText>
         <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-          <Text>{date}</Text>
+          <AppText>{date}</AppText>
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
@@ -264,95 +268,117 @@ export default function DonationDueScreen() {
           />
         )}
 
-        <Text style={styles.label}>Note (optional)</Text>
-        <TextInput style={styles.input} placeholder="Notes" value={note} onChangeText={setNote} />
+        <AppText style={styles.label}>Note (optional)</AppText>
+        <TextField style={styles.input} placeholder="Notes" value={note} onChangeText={setNote} />
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save</Text>
+          <AppText style={styles.saveButtonText}>Save</AppText>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Entries</Text>
+      <AppText style={styles.sectionTitle}>Recent Entries</AppText>
       {dues.length === 0 ? (
-        <Text style={styles.empty}>No entries yet.</Text>
+        <AppText style={styles.empty}>No entries yet.</AppText>
       ) : (
-        dues.map((d) => (
-          <View key={d.id} style={styles.dueRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dueType}>{d.type === 'zakat' ? 'Zakat' : 'Sadqa'}</Text>
-              <Text style={styles.dueDate}>{d.date}</Text>
-              {d.note ? <Text style={styles.dueNote}>{d.note}</Text> : null}
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.dueAmount}>Rs {d.amount.toFixed(0)}</Text>
-              <TouchableOpacity onPress={() => handleDelete(d.id)}>
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))
+        dues.map((d) => {
+          const automatic = isMigrationDue(d);
+          return (
+            <TouchableOpacity
+              key={d.id}
+              style={styles.dueRow}
+              onPress={() => openDueEditor(d.id)}
+              activeOpacity={0.6}
+            >
+              <View style={{ flex: 1 }}>
+                <AppText style={styles.dueType}>{d.type === 'zakat' ? 'Zakat' : 'Sadqa'}</AppText>
+                <AppText style={styles.dueDate}>{d.date}</AppText>
+                {automatic ? (
+                  <AppText style={styles.dueNote}>Automatic entry: pledges you have already donated</AppText>
+                ) : d.note ? (
+                  <AppText style={styles.dueNote}>{d.note}</AppText>
+                ) : null}
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <AppText style={styles.dueAmount}>{formatMoney(d.amount)}</AppText>
+                {!automatic && (
+                  <View style={styles.dueActions}>
+                    <TouchableOpacity onPress={() => openDueEditor(d.id)} hitSlop={8}>
+                      <AppText style={styles.editText}>Edit</AppText>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDelete(d.id)} hitSlop={8}>
+                      <AppText style={styles.deleteText}>Delete</AppText>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })
       )}
 
       <Modal visible={showIncomePicker} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Income Entry</Text>
+            <AppText style={styles.modalTitle}>Select Income Entry</AppText>
             <FlatList
               data={incomeList}
               keyExtractor={(item) => item.id.toString()}
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.modalRow} onPress={() => selectIncomeEntry(item)}>
-                  <Text style={styles.modalRowText}>
-                    {item.source || 'Income'} — Rs {item.amount.toFixed(0)}
-                  </Text>
-                  <Text style={styles.modalRowDate}>{item.date}</Text>
+                  <AppText style={styles.modalRowText}>
+                    {item.source || 'Income'} — {formatMoney(item.amount)}
+                  </AppText>
+                  <AppText style={styles.modalRowDate}>{item.date}</AppText>
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={<Text style={styles.empty}>No income logged yet.</Text>}
+              ListEmptyComponent={<AppText style={styles.empty}>No income logged yet.</AppText>}
             />
             <TouchableOpacity style={styles.modalClose} onPress={() => setShowIncomePicker(false)}>
-              <Text style={styles.modalCloseText}>Close</Text>
+              <AppText style={styles.modalCloseText}>Close</AppText>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </FormScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  summaryRow: { flexDirection: 'row', padding: 12, gap: 8 },
-  summaryCard: { flex: 1, borderRadius: 10, padding: 10, alignItems: 'center' },
-  summaryLabel: { color: '#fff', fontSize: 11 },
-  summaryAmount: { color: '#fff', fontSize: 16, fontWeight: '800', marginTop: 2 },
-  form: { padding: 16 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  label: { fontSize: 13, color: '#666', marginBottom: 4 },
-  linkText: { fontSize: 12, color: '#2563eb', fontWeight: '600' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 15 },
-  inputDisabled: { backgroundColor: '#f3f4f6', color: '#888' },
-  typeSelector: { flexDirection: 'row', gap: 8 },
-  typeButton: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
-  typeButtonActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  typeButtonText: { fontSize: 14, fontWeight: '600', color: '#333' },
-  typeButtonTextActive: { color: '#fff' },
-  saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
-  empty: { textAlign: 'center', color: '#999', marginTop: 20, marginBottom: 20 },
-  dueRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  dueType: { fontSize: 15, fontWeight: '600' },
-  dueDate: { fontSize: 12, color: '#666', marginTop: 2 },
-  dueNote: { fontSize: 12, color: '#888', marginTop: 2 },
-  dueAmount: { fontSize: 15, fontWeight: '700' },
-  deleteText: { fontSize: 12, color: '#d33', marginTop: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: '70%' },
-  modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
-  modalRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  modalRowText: { fontSize: 15, fontWeight: '600' },
-  modalRowDate: { fontSize: 12, color: '#666', marginTop: 2 },
-  modalClose: { marginTop: 12, alignItems: 'center', padding: 10 },
-  modalCloseText: { color: '#2563eb', fontWeight: '600' },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    summaryRow: { flexDirection: 'row', padding: 12, gap: 8 },
+    summaryCard: { flex: 1, borderRadius: 10, padding: 10, alignItems: 'center' },
+    summaryLabel: { color: '#fff', fontSize: 11 },
+    summaryAmount: { color: '#fff', fontSize: 16, fontWeight: '800', marginTop: 2 },
+    form: { padding: 16 },
+    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+    label: { fontSize: 13, color: c.textMuted, marginBottom: 4 },
+    linkText: { fontSize: 12, color: c.primary, fontWeight: '600' },
+    input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 12, fontSize: 15 },
+    inputDisabled: { backgroundColor: c.surfaceAlt, color: c.textMuted },
+    typeSelector: { flexDirection: 'row', gap: 8 },
+    typeButton: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+    typeButtonActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+    typeButtonText: { fontSize: 14, fontWeight: '600', color: c.text },
+    typeButtonTextActive: { color: '#fff' },
+    saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
+    saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
+    empty: { textAlign: 'center', color: c.textMuted, marginTop: 20, marginBottom: 20 },
+    dueRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    dueType: { fontSize: 15, fontWeight: '600' },
+    dueDate: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    dueNote: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    dueAmount: { fontSize: 15, fontWeight: '700' },
+    deleteText: { fontSize: 12, color: c.danger, marginTop: 6 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: c.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, maxHeight: '70%' },
+    modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
+    modalRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    modalRowText: { fontSize: 15, fontWeight: '600' },
+    modalRowDate: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    modalClose: { marginTop: 12, alignItems: 'center', padding: 10 },
+    modalCloseText: { color: c.primary, fontWeight: '600' },
+    dueActions: { flexDirection: 'row', gap: 16, marginTop: 6 },
+    editText: { fontSize: 12, color: c.primary },
+  });

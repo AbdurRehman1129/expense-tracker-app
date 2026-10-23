@@ -1,27 +1,25 @@
 import { useState, useCallback } from 'react';
 import { useDateField } from '@/hooks/use-today';
 import { toDateString, parseDateString } from '@/utils/date';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Alert,
-  Keyboard,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Keyboard } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
 
-import { addIncome, getAllIncome, deleteIncome } from '@/db/income';
+import { addIncome, getIncomePage, getTotalIncome, deleteIncome } from '@/db/income';
 import { Income } from '@/types';
 import IncomeListItem from '@/components/IncomeListItem';
-
+import { AppText } from '@/components/ui/AppText';
+import { TextField } from '@/components/ui/TextField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
+import { useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
+import { formatMoney } from '@/utils/money';
+import { openHistory, openIncomeEditor } from '@/utils/navigation';
 
 export default function IncomeScreen() {
+  const styles = useThemedStyles(makeStyles);
   const [incomeList, setIncomeList] = useState<Income[]>([]);
+  const [totalIncome, setTotalIncome] = useState(0);
 
   const [amount, setAmount] = useState('');
   const [source, setSource] = useState('');
@@ -30,8 +28,9 @@ export default function IncomeScreen() {
   const [note, setNote] = useState('');
 
   const loadData = useCallback(async () => {
-    const list = await getAllIncome();
+    const [list, total] = await Promise.all([getIncomePage({ limit: 20 }), getTotalIncome()]);
     setIncomeList(list);
+    setTotalIncome(total);
   }, []);
 
   useFocusEffect(
@@ -107,18 +106,17 @@ export default function IncomeScreen() {
   ]);
 };
 
-  const totalIncome = incomeList.reduce((sum, i) => sum + i.amount, 0);
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <FormScrollView style={styles.container}>
       <View style={styles.summary}>
-        <Text style={styles.summaryLabel}>Total Income Logged</Text>
-        <Text style={styles.summaryAmount}>Rs {totalIncome.toFixed(0)}</Text>
+        <AppText style={styles.summaryLabel}>Total Income Logged</AppText>
+        <AppText style={styles.summaryAmount}>{formatMoney(totalIncome)}</AppText>
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.label}>Amount</Text>
-        <TextInput
+        <AppText style={styles.label}>Amount</AppText>
+        <TextField
           style={styles.input}
           keyboardType="numeric"
           placeholder="0"
@@ -126,17 +124,17 @@ export default function IncomeScreen() {
           onChangeText={setAmount}
         />
 
-        <Text style={styles.label}>Source (optional)</Text>
-        <TextInput
+        <AppText style={styles.label}>Source (optional)</AppText>
+        <TextField
           style={styles.input}
           placeholder="e.g. Client project, Salary"
           value={source}
           onChangeText={setSource}
         />
 
-        <Text style={styles.label}>Date</Text>
+        <AppText style={styles.label}>Date</AppText>
         <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-          <Text>{date}</Text>
+          <AppText>{date}</AppText>
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
@@ -152,8 +150,8 @@ export default function IncomeScreen() {
           />
         )}
 
-        <Text style={styles.label}>Note (optional)</Text>
-        <TextInput
+        <AppText style={styles.label}>Note (optional)</AppText>
+        <TextField
           style={styles.input}
           placeholder="e.g. Invoice #23"
           value={note}
@@ -161,48 +159,58 @@ export default function IncomeScreen() {
         />
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Income</Text>
+          <AppText style={styles.saveButtonText}>Save Income</AppText>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Income</Text>
+      <AppText style={styles.sectionTitle}>Recent Income</AppText>
       {incomeList.length === 0 ? (
-        <Text style={styles.empty}>No income logged yet.</Text>
+        <AppText style={styles.empty}>No income logged yet.</AppText>
       ) : (
         incomeList.map((inc) => (
-          <IncomeListItem key={inc.id} income={inc} onDelete={handleDelete} />
+          <IncomeListItem
+            key={inc.id}
+            income={inc}
+            onEdit={(i) => openIncomeEditor(i.id)}
+            onDelete={handleDelete}
+          />
         ))
       )}
-    </ScrollView>
+      <TouchableOpacity onPress={() => openHistory('income')}>
+        <AppText style={styles.viewAllLink}>View all income →</AppText>
+      </TouchableOpacity>
+    </FormScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  summary: {
-    backgroundColor: '#16a34a',
-    padding: 20,
-    alignItems: 'center',
-  },
-  summaryLabel: { color: '#e6f9ee', fontSize: 13 },
-  summaryAmount: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 4 },
-  form: { padding: 16 },
-  label: { fontSize: 13, color: '#666', marginTop: 12, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-  },
-  saveButton: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
-  empty: { textAlign: 'center', color: '#999', marginTop: 20 },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    summary: {
+      backgroundColor: '#16a34a',
+      padding: 20,
+      alignItems: 'center',
+    },
+    summaryLabel: { color: '#e6f9ee', fontSize: 13 },
+    summaryAmount: { color: '#fff', fontSize: 28, fontWeight: '800', marginTop: 4 },
+    form: { padding: 16 },
+    label: { fontSize: 13, color: c.textMuted, marginTop: 12, marginBottom: 4 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 15,
+    },
+    saveButton: {
+      backgroundColor: '#16a34a',
+      borderRadius: 8,
+      padding: 14,
+      alignItems: 'center',
+      marginTop: 20,
+    },
+    saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
+    empty: { textAlign: 'center', color: c.textMuted, marginTop: 20 },
+    viewAllLink: { textAlign: 'center', color: c.primary, fontWeight: '600', padding: 16 },
+  });

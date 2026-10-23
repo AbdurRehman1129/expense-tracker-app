@@ -9,6 +9,11 @@ export async function getAllRecurringExpenses(): Promise<RecurringExpense[]> {
   );
 }
 
+export async function getRecurringExpenseById(id: number): Promise<RecurringExpense | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<RecurringExpense>('SELECT * FROM recurring_expenses WHERE id = ?', [id]);
+}
+
 export async function addRecurringExpense(item: {
   amount: number;
   category_id: number;
@@ -49,15 +54,16 @@ export async function updateRecurringExpense(
 
   await db.runAsync(
     `UPDATE recurring_expenses
-     SET amount = ?, category_id = ?, frequency = ?, payment_method = ?, note = ?, next_due_date = ?, is_active = ?
+     SET amount = ?, category_id = ?, frequency = ?, payment_method = ?, note = ?, next_due_date = ?, anchor_day = ?, is_active = ?
      WHERE id = ?`,
     [
       updates.amount ?? existing.amount,
       updates.category_id ?? existing.category_id,
       updates.frequency ?? existing.frequency,
-      updates.payment_method ?? existing.payment_method,
-      updates.note ?? existing.note,
+      updates.payment_method !== undefined ? updates.payment_method : existing.payment_method,
+      updates.note !== undefined ? updates.note : existing.note,
       updates.next_due_date ?? existing.next_due_date,
+      updates.anchor_day !== undefined ? updates.anchor_day : existing.anchor_day,
       updates.is_active ?? existing.is_active,
       id,
     ]

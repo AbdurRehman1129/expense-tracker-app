@@ -1,11 +1,14 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useFocusEffect } from 'expo-router';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getSetting, setSetting } from '@/db/settings';
 import { scheduleDailyReminder } from '@/utils/notifications';
+import { AppText } from '@/components/ui/AppText';
+import { ThemePreference, useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
+import { SelectField, SelectOption } from '@/components/ui/SelectField';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 
 function timeStringToDate(timeStr: string): Date {
   const [hh, mm] = timeStr.split(':').map((n) => parseInt(n, 10));
@@ -20,7 +23,20 @@ function dateToTimeString(d: Date): string {
   return `${hh}:${mm}`;
 }
 
+const DAY_OPTIONS: SelectOption<number>[] = Array.from({ length: 28 }, (_, i) => ({
+  label: String(i + 1),
+  value: i + 1,
+}));
+
+const APPEARANCE_OPTIONS: { label: string; value: ThemePreference }[] = [
+  { label: 'System', value: 'system' },
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
+];
+
 export default function SettingsScreen() {
+  const styles = useThemedStyles(makeStyles);
+  const { preference, setPreference } = useTheme();
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState('21:00');
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -86,28 +102,36 @@ export default function SettingsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <Text>Loading settings…</Text>
+        <AppText>Loading settings…</AppText>
       </View>
     );
   }
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.sectionTitle}>Daily Expense Reminder</Text>
+      <AppText style={styles.sectionTitle}>Appearance</AppText>
+      <View style={styles.card}>
+        <SegmentedControl value={preference} options={APPEARANCE_OPTIONS} onChange={setPreference} />
+        <AppText style={styles.hint}>
+          System follows your phone&apos;s dark mode setting. Light and Dark stay fixed.
+        </AppText>
+      </View>
+
+      <AppText style={styles.sectionTitle}>Daily Expense Reminder</AppText>
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.rowLabel}>{reminderEnabled ? 'Enabled' : 'Disabled'}</Text>
+          <AppText style={styles.rowLabel}>{reminderEnabled ? 'Enabled' : 'Disabled'}</AppText>
           <Switch value={reminderEnabled} onValueChange={handleToggleReminder} />
         </View>
 
         <View style={styles.rowBetween}>
-          <Text style={styles.rowLabel}>Reminder Time</Text>
+          <AppText style={styles.rowLabel}>Reminder Time</AppText>
           <TouchableOpacity
             style={styles.timeButton}
             onPress={() => setShowTimePicker(true)}
             disabled={!reminderEnabled}
           >
-            <Text style={[styles.timeButtonText, !reminderEnabled && styles.disabledText]}>{reminderTime}</Text>
+            <AppText style={[styles.timeButtonText, !reminderEnabled && styles.disabledText]}>{reminderTime}</AppText>
           </TouchableOpacity>
         </View>
 
@@ -120,97 +144,89 @@ export default function SettingsScreen() {
           />
         )}
 
-        <Text style={styles.hint}>
+        <AppText style={styles.hint}>
           You&apos;ll get a daily reminder at this time — unless you&apos;ve already logged an
           expense that day. Tapping the notification opens Add Expense; you can also snooze it by an hour.
-        </Text>
+        </AppText>
 
         {reminderEnabled && (
           <TouchableOpacity style={styles.testButton} onPress={handleTestReminder}>
-            <Text style={styles.testButtonText}>Reschedule Now</Text>
+            <AppText style={styles.testButtonText}>Reschedule Now</AppText>
           </TouchableOpacity>
         )}
       </View>
 
-      <Text style={styles.sectionTitle}>Monthly Sadqa Reminder</Text>
+      <AppText style={styles.sectionTitle}>Monthly Sadqa Reminder</AppText>
       <View style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.rowLabel}>{sadqaReminderEnabled ? 'Enabled' : 'Disabled'}</Text>
+          <AppText style={styles.rowLabel}>{sadqaReminderEnabled ? 'Enabled' : 'Disabled'}</AppText>
           <Switch value={sadqaReminderEnabled} onValueChange={handleToggleSadqaReminder} />
         </View>
 
         <View style={styles.rowBetween}>
-          <Text style={styles.rowLabel}>Remind From Day</Text>
-          <View style={styles.dayPickerWrapper}>
-            <Picker
-              enabled={sadqaReminderEnabled}
-              selectedValue={sadqaReminderDay}
-              onValueChange={(val) => handleSadqaDayChange(Number(val))}
-            >
-              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
-                <Picker.Item key={day} label={String(day)} value={day} />
-              ))}
-            </Picker>
-          </View>
+          <AppText style={styles.rowLabel}>Remind From Day</AppText>
+          <SelectField
+            style={styles.daySelect}
+            disabled={!sadqaReminderEnabled}
+            value={sadqaReminderDay}
+            options={DAY_OPTIONS}
+            onChange={handleSadqaDayChange}
+            title="Remind from day"
+          />
         </View>
 
-        <Text style={styles.hint}>
+        <AppText style={styles.hint}>
           If you haven&apos;t logged any Sadqa for the previous month by this day of the current
           month, you&apos;ll get a one-time reminder (checked whenever you open the app).
-        </Text>
+        </AppText>
       </View>
-      <Text style={styles.sectionTitle}>Cloud Backup</Text>
+      <AppText style={styles.sectionTitle}>Cloud Backup</AppText>
       <View style={styles.card}>
-        <Text style={styles.hint}>Back up your data to Google Drive so you can restore it if you switch phones.</Text>
+        <AppText style={styles.hint}>Back up your data to Google Drive so you can restore it if you switch phones.</AppText>
         <TouchableOpacity style={styles.testButton} onPress={() => router.push('/backup')}>
-          <Text style={styles.testButtonText}>Manage Backup</Text>
+          <AppText style={styles.testButtonText}>Manage Backup</AppText>
         </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 16 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 8, marginBottom: 8 },
-  card: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 24,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  rowLabel: { fontSize: 14, fontWeight: '600' },
-  timeButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  timeButtonText: { fontSize: 14, fontWeight: '600', color: '#2563eb' },
-  disabledText: { color: '#aaa' },
-  dayPickerWrapper: {
-    width: 110,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
-  hint: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 17 },
-  testButton: {
-    marginTop: 14,
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  testButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background, padding: 16 },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginTop: 8, marginBottom: 8 },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: 10,
+      padding: 14,
+      marginBottom: 24,
+    },
+    rowBetween: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    rowLabel: { fontSize: 14, fontWeight: '600' },
+    timeButton: {
+      backgroundColor: c.background,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+    },
+    timeButtonText: { fontSize: 14, fontWeight: '600', color: c.primary },
+    disabledText: { color: c.textMuted },
+    daySelect: { width: 110 },
+    hint: { fontSize: 12, color: c.textMuted, marginTop: 4, lineHeight: 17 },
+    testButton: {
+      marginTop: 14,
+      backgroundColor: '#2563eb',
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    testButtonText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  });

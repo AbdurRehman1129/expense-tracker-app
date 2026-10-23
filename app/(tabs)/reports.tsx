@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { PieChart, LineChart } from 'react-native-chart-kit';
 
@@ -8,6 +8,9 @@ import { getTotalIncome, getIncomeRowsForExport } from '@/db/income';
 import { getDonationTotals, getDonationRowsForExport } from '@/db/donations';
 import { getMonthRange, getYearRange } from '@/utils/dateRanges';
 import { exportCsv, exportPdf } from '@/utils/export';
+import { AppText } from '@/components/ui/AppText';
+import { useTheme, useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
 
 type RangeMode = 'month' | 'year' | 'all';
 type TypeFilter = 'all' | 'expense' | 'income' | 'donation';
@@ -23,6 +26,8 @@ function rangeLabel(mode: RangeMode) {
 }
 
 export default function ReportsScreen() {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const [rangeMode, setRangeMode] = useState<RangeMode>('month');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
 
@@ -73,7 +78,7 @@ export default function ReportsScreen() {
     name: cat.category_name,
     amount: cat.total,
     color: CHART_COLORS[index % CHART_COLORS.length],
-    legendFontColor: '#333',
+    legendFontColor: colors.text,
     legendFontSize: 12,
   }));
 
@@ -205,7 +210,7 @@ export default function ReportsScreen() {
             style={[styles.toggleButton, rangeMode === m && styles.toggleButtonActive]}
             onPress={() => setRangeMode(m)}
           >
-            <Text style={[styles.toggleText, rangeMode === m && styles.toggleTextActive]}>{rangeLabel(m)}</Text>
+            <AppText style={[styles.toggleText, rangeMode === m && styles.toggleTextActive]}>{rangeLabel(m)}</AppText>
           </TouchableOpacity>
         ))}
       </View>
@@ -222,7 +227,7 @@ export default function ReportsScreen() {
             style={[styles.toggleButtonSmall, typeFilter === t.key && styles.toggleButtonActive]}
             onPress={() => setTypeFilter(t.key)}
           >
-            <Text style={[styles.toggleText, typeFilter === t.key && styles.toggleTextActive]}>{t.label}</Text>
+            <AppText style={[styles.toggleText, typeFilter === t.key && styles.toggleTextActive]}>{t.label}</AppText>
           </TouchableOpacity>
         ))}
       </View>
@@ -234,39 +239,39 @@ export default function ReportsScreen() {
           <View style={styles.summaryRow}>
             {(typeFilter === 'all' || typeFilter === 'income') && (
               <View style={[styles.summaryCard, { backgroundColor: '#16a34a' }]}>
-                <Text style={styles.summaryLabel}>Income</Text>
-                <Text style={styles.summaryAmount}>Rs {totalIncome.toFixed(0)}</Text>
+                <AppText style={styles.summaryLabel}>Income</AppText>
+                <AppText style={styles.summaryAmount}>Rs {totalIncome.toFixed(0)}</AppText>
               </View>
             )}
             {(typeFilter === 'all' || typeFilter === 'expense') && (
               <View style={[styles.summaryCard, { backgroundColor: '#dc2626' }]}>
-                <Text style={styles.summaryLabel}>Expense</Text>
-                <Text style={styles.summaryAmount}>Rs {totalExpense.toFixed(0)}</Text>
+                <AppText style={styles.summaryLabel}>Expense</AppText>
+                <AppText style={styles.summaryAmount}>Rs {totalExpense.toFixed(0)}</AppText>
               </View>
             )}
           </View>
           {(typeFilter === 'all' || typeFilter === 'donation') && (
             <View style={styles.summaryRow}>
               <View style={[styles.summaryCard, { backgroundColor: '#7c3aed' }]}>
-                <Text style={styles.summaryLabel}>Zakat</Text>
-                <Text style={styles.summaryAmount}>Rs {zakat.toFixed(0)}</Text>
+                <AppText style={styles.summaryLabel}>Zakat</AppText>
+                <AppText style={styles.summaryAmount}>Rs {zakat.toFixed(0)}</AppText>
               </View>
               <View style={[styles.summaryCard, { backgroundColor: '#0891b2' }]}>
-                <Text style={styles.summaryLabel}>Sadqa</Text>
-                <Text style={styles.summaryAmount}>Rs {sadqa.toFixed(0)}</Text>
+                <AppText style={styles.summaryLabel}>Sadqa</AppText>
+                <AppText style={styles.summaryAmount}>Rs {sadqa.toFixed(0)}</AppText>
               </View>
             </View>
           )}
 
-          <Text style={styles.sectionTitle}>Spending by Category</Text>
+          <AppText style={styles.sectionTitle}>Spending by Category</AppText>
           {chartData.length === 0 ? (
-            <Text style={styles.empty}>No expenses in this period.</Text>
+            <AppText style={styles.empty}>No expenses in this period.</AppText>
           ) : (
             <PieChart
               data={chartData}
               width={screenWidth - 32}
               height={200}
-              chartConfig={{ color: () => '#333' }}
+              chartConfig={{ color: () => colors.text }}
               accessor="amount"
               backgroundColor="transparent"
               paddingLeft="8"
@@ -274,9 +279,9 @@ export default function ReportsScreen() {
             />
           )}
 
-          <Text style={styles.sectionTitle}>Monthly Trend (Last 6 Months)</Text>
+          <AppText style={styles.sectionTitle}>Monthly Trend (Last 6 Months)</AppText>
           {!hasTrendData ? (
-            <Text style={styles.empty}>No expense history yet.</Text>
+            <AppText style={styles.empty}>No expense history yet.</AppText>
           ) : (
             <LineChart
               data={{ labels: trendLabels, datasets: [{ data: trendValues }] }}
@@ -284,11 +289,11 @@ export default function ReportsScreen() {
               height={200}
               yAxisLabel="Rs "
               chartConfig={{
-                backgroundGradientFrom: '#fff',
-                backgroundGradientTo: '#fff',
+                backgroundGradientFrom: colors.card,
+                backgroundGradientTo: colors.card,
                 decimalPlaces: 0,
                 color: (opacity = 1) => `rgba(37, 99, 235, ${opacity})`,
-                labelColor: () => '#666',
+                labelColor: () => colors.textMuted,
                 propsForDots: { r: '4', strokeWidth: '2', stroke: '#2563eb' },
               }}
               bezier
@@ -296,13 +301,13 @@ export default function ReportsScreen() {
             />
           )}
 
-          <Text style={styles.sectionTitle}>Export ({rangeLabel(rangeMode)} · {typeFilter === 'all' ? 'All' : typeFilter[0].toUpperCase() + typeFilter.slice(1)})</Text>
+          <AppText style={styles.sectionTitle}>Export ({rangeLabel(rangeMode)} · {typeFilter === 'all' ? 'All' : typeFilter[0].toUpperCase() + typeFilter.slice(1)})</AppText>
           <View style={styles.exportRow}>
             <TouchableOpacity style={styles.exportButton} onPress={handleExportCsv} disabled={exporting}>
-              {exporting ? <ActivityIndicator color="#fff" /> : <Text style={styles.exportButtonText}>Export CSV</Text>}
+              {exporting ? <ActivityIndicator color="#fff" /> : <AppText style={styles.exportButtonText}>Export CSV</AppText>}
             </TouchableOpacity>
             <TouchableOpacity style={[styles.exportButton, { backgroundColor: '#dc2626' }]} onPress={handleExportPdf} disabled={exporting}>
-              {exporting ? <ActivityIndicator color="#fff" /> : <Text style={styles.exportButtonText}>Export PDF</Text>}
+              {exporting ? <ActivityIndicator color="#fff" /> : <AppText style={styles.exportButtonText}>Export PDF</AppText>}
             </TouchableOpacity>
           </View>
         </>
@@ -311,29 +316,30 @@ export default function ReportsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  toggleRow: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 16,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    padding: 4,
-    gap: 4,
-  },
-  toggleButton: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
-  toggleButtonSmall: { flex: 1, paddingVertical: 6, borderRadius: 6, alignItems: 'center' },
-  toggleButtonActive: { backgroundColor: '#2563eb' },
-  toggleText: { fontSize: 12, fontWeight: '600', color: '#666' },
-  toggleTextActive: { color: '#fff' },
-  summaryRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginTop: 16 },
-  summaryCard: { flex: 1, borderRadius: 10, padding: 14, alignItems: 'center' },
-  summaryLabel: { color: '#fff', fontSize: 12 },
-  summaryAmount: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 4 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 24, marginBottom: 8 },
-  empty: { textAlign: 'center', color: '#999', marginTop: 10, marginBottom: 20 },
-  exportRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 30 },
-  exportButton: { flex: 1, backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
-  exportButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    toggleRow: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginTop: 16,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 8,
+      padding: 4,
+      gap: 4,
+    },
+    toggleButton: { flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+    toggleButtonSmall: { flex: 1, paddingVertical: 6, borderRadius: 6, alignItems: 'center' },
+    toggleButtonActive: { backgroundColor: '#2563eb' },
+    toggleText: { fontSize: 12, fontWeight: '600', color: c.textMuted },
+    toggleTextActive: { color: '#fff' },
+    summaryRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginTop: 16 },
+    summaryCard: { flex: 1, borderRadius: 10, padding: 14, alignItems: 'center' },
+    summaryLabel: { color: '#fff', fontSize: 12 },
+    summaryAmount: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 4 },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 24, marginBottom: 8 },
+    empty: { textAlign: 'center', color: c.textMuted, marginTop: 10, marginBottom: 20 },
+    exportRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 30 },
+    exportButton: { flex: 1, backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
+    exportButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  });

@@ -1,17 +1,5 @@
 import { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Alert,
-  Switch,
-  Keyboard,
-} from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Switch, Keyboard } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
 
@@ -24,6 +12,15 @@ import {
 } from '@/db/recurringExpenses';
 import { Category, RecurringExpense, RecurringFrequency } from '@/types';
 import { advanceByFrequency, parseDateString, todayString } from '@/utils/date';
+import { AppText } from '@/components/ui/AppText';
+import { TextField } from '@/components/ui/TextField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
+import { useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
+import { SelectField } from '@/components/ui/SelectField';
+import { formatMoney } from '@/utils/money';
+import { FREQUENCY_OPTIONS } from '@/constants/options';
+import { openRecurringEditor } from '@/utils/navigation';
 
 function calculateNextDueDate(startDate: string, frequency: RecurringFrequency) {
   // Month-end safe: Jan 31 + 1 month = Feb 28/29 (not Mar 3).
@@ -31,6 +28,7 @@ function calculateNextDueDate(startDate: string, frequency: RecurringFrequency) 
 }
 
 export default function RecurringExpensesScreen() {
+  const styles = useThemedStyles(makeStyles);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<RecurringExpense[]>([]);
 
@@ -186,10 +184,10 @@ await loadData();
   const getCategoryName = (id: number) => categories.find((c) => c.id === id)?.name ?? 'Unknown';
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <FormScrollView style={styles.container}>
       <View style={styles.form}>
-        <Text style={styles.label}>Amount</Text>
-        <TextInput
+        <AppText style={styles.label}>Amount</AppText>
+        <TextField
           style={styles.input}
           keyboardType="numeric"
           placeholder="0"
@@ -197,41 +195,35 @@ await loadData();
           onChangeText={setAmount}
         />
 
-        <Text style={styles.label}>Category</Text>
-        <View style={styles.pickerWrapper}>
-          <Picker selectedValue={categoryId} onValueChange={setCategoryId}>
-            {categories.map((cat) => (
-              <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
-            ))}
-          </Picker>
-        </View>
+        <AppText style={styles.label}>Category</AppText>
+        <SelectField
+          value={categoryId}
+          options={categories.map((cat) => ({ label: cat.name, value: cat.id }))}
+          onChange={setCategoryId}
+          placeholder="Select category"
+          title="Category"
+        />
 
-        <Text style={styles.label}>Frequency</Text>
-        <View style={styles.pickerWrapper}>
-<Picker
-  selectedValue={frequency}
-  onValueChange={(v) =>
-    handleFrequencyChange(v as RecurringFrequency)
-  }
->
-  <Picker.Item label="Daily" value="daily" />
-  <Picker.Item label="Weekly" value="weekly" />
-  <Picker.Item label="Monthly" value="monthly" />
-</Picker>
-        </View>
+        <AppText style={styles.label}>Frequency</AppText>
+        <SelectField
+          value={frequency}
+          options={FREQUENCY_OPTIONS}
+          onChange={handleFrequencyChange}
+          title="Frequency"
+        />
 
-        <Text style={styles.label}>Start Date</Text>
+        <AppText style={styles.label}>Start Date</AppText>
 
 <TouchableOpacity
   style={styles.input}
   onPress={() => setShowDatePicker(true)}
 >
-  <Text>{startDate}</Text>
+  <AppText>{startDate}</AppText>
 </TouchableOpacity>
-<Text style={styles.label}>Next Due Date</Text>
+<AppText style={styles.label}>Next Due Date</AppText>
 
 <View style={styles.input}>
-  <Text>{nextDueDate}</Text>
+  <AppText>{nextDueDate}</AppText>
 </View>
         {showDatePicker && (
   <DateTimePicker
@@ -262,61 +254,65 @@ await loadData();
   />
 )}
 
-        <Text style={styles.label}>Note (optional)</Text>
-        <TextInput style={styles.input} placeholder="e.g. Netflix subscription" value={note} onChangeText={setNote} />
+        <AppText style={styles.label}>Note (optional)</AppText>
+        <TextField style={styles.input} placeholder="e.g. Netflix subscription" value={note} onChangeText={setNote} />
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Recurring Expense</Text>
+          <AppText style={styles.saveButtonText}>Save Recurring Expense</AppText>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Your Recurring Expenses</Text>
+      <AppText style={styles.sectionTitle}>Your Recurring Expenses</AppText>
       {items.length === 0 ? (
-        <Text style={styles.empty}>None set up yet.</Text>
+        <AppText style={styles.empty}>None set up yet.</AppText>
       ) : (
         items.map((item) => (
           <View key={item.id} style={styles.itemRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.itemTitle}>{getCategoryName(item.category_id)}</Text>
-              <Text style={styles.itemSub}>
-                Rs {item.amount.toFixed(0)} · {item.frequency} · Next: {item.next_due_date}
-              </Text>
-              {item.note ? <Text style={styles.itemNote}>{item.note}</Text> : null}
+              <AppText style={styles.itemTitle}>{getCategoryName(item.category_id)}</AppText>
+              <AppText style={styles.itemSub}>
+                {formatMoney(item.amount)} · {item.frequency} · Next: {item.next_due_date}
+              </AppText>
+              {item.note ? <AppText style={styles.itemNote}>{item.note}</AppText> : null}
             </View>
             <View style={styles.itemActions}>
               <Switch value={item.is_active === 1} onValueChange={() => handleTogglePause(item)} />
-              <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                <Text style={styles.deleteText}>Delete</Text>
+              <TouchableOpacity onPress={() => openRecurringEditor(item.id)} hitSlop={8}>
+                <AppText style={styles.editText}>Edit</AppText>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={8}>
+                <AppText style={styles.deleteText}>Delete</AppText>
               </TouchableOpacity>
             </View>
           </View>
         ))
       )}
-    </ScrollView>
+    </FormScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  form: { padding: 16 },
-  label: { fontSize: 13, color: '#666', marginTop: 12, marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 15 },
-  pickerWrapper: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8 },
-  saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8, marginBottom: 8 },
-  empty: { textAlign: 'center', color: '#999', marginTop: 10, marginBottom: 20 },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  itemTitle: { fontSize: 15, fontWeight: '600' },
-  itemSub: { fontSize: 12, color: '#666', marginTop: 2 },
-  itemNote: { fontSize: 12, color: '#888', marginTop: 2 },
-  itemActions: { alignItems: 'center', gap: 8 },
-  deleteText: { fontSize: 12, color: '#d33' },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    form: { padding: 16 },
+    label: { fontSize: 13, color: c.textMuted, marginTop: 12, marginBottom: 4 },
+    input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 12, fontSize: 15 },
+    saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
+    saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8, marginBottom: 8 },
+    empty: { textAlign: 'center', color: c.textMuted, marginTop: 10, marginBottom: 20 },
+    itemRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    itemTitle: { fontSize: 15, fontWeight: '600' },
+    itemSub: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    itemNote: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    itemActions: { alignItems: 'center', gap: 8 },
+    deleteText: { fontSize: 12, color: c.danger },
+    editText: { fontSize: 12, color: c.primary },
+  });

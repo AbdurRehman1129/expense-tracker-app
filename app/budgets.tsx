@@ -1,22 +1,31 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Alert,Keyboard } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, Keyboard } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 
 import {
   getAllCategories,
   addCategory,
   deleteCategory,
+  renameCategory,
 } from '@/db/categories';
 import { getAllBudgets, setBudget, deleteBudget } from '@/db/budgets';
 import { Category, Budget } from '@/types';
+import { AppText } from '@/components/ui/AppText';
+import { TextField } from '@/components/ui/TextField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
+import { useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
 
 export default function BudgetsScreen() {
+  const styles = useThemedStyles(makeStyles);
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [inputs, setInputs] = useState<Record<number, string>>({});
 
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const loadData = useCallback(async () => {
     const cats = await getAllCategories();
@@ -104,6 +113,21 @@ export default function BudgetsScreen() {
     loadData();
   };
 
+const handleRename = async () => {
+  if (renamingId === null) return;
+  Keyboard.dismiss();
+  try {
+    await renameCategory(renamingId, renameValue);
+    setRenamingId(null);
+    await loadData();
+  } catch (error) {
+    Alert.alert(
+      'Rename failed',
+      error instanceof Error ? error.message : 'Something went wrong while renaming.'
+    );
+  }
+};
+
 const handleDeleteCategory = async (categoryId: number, categoryName: string) => {
   Alert.alert(
     'Delete category?',
@@ -148,14 +172,14 @@ const getBudgetFor = (categoryId: number) =>
   budgets.find((b) => b.category_id === categoryId);
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.intro}>Set a monthly spending limit per category. You&apos;ll get a notification if you go over.</Text>
+    <FormScrollView style={styles.container}>
+      <AppText style={styles.intro}>Set a monthly spending limit per category. You&apos;ll get a notification if you go over.</AppText>
 
       {showAddCategory ? (
         <View style={styles.addCategoryBox}>
-          <Text style={styles.label}>New Category Name</Text>
+          <AppText style={styles.label}>New Category Name</AppText>
           <View style={styles.inputRow}>
-            <TextInput
+            <TextField
               style={styles.input}
               placeholder="e.g. Subscriptions"
               value={newCategoryName}
@@ -163,7 +187,7 @@ const getBudgetFor = (categoryId: number) =>
               autoFocus
             />
             <TouchableOpacity style={styles.saveBtn} onPress={handleAddCategory}>
-              <Text style={styles.saveBtnText}>Add</Text>
+              <AppText style={styles.saveBtnText}>Add</AppText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.removeBtn}
@@ -172,13 +196,13 @@ const getBudgetFor = (categoryId: number) =>
                 setNewCategoryName('');
               }}
             >
-              <Text style={styles.removeBtnText}>Cancel</Text>
+              <AppText style={styles.removeBtnText}>Cancel</AppText>
             </TouchableOpacity>
           </View>
         </View>
       ) : (
         <TouchableOpacity style={styles.addCategoryLink} onPress={() => setShowAddCategory(true)}>
-          <Text style={styles.addCategoryLinkText}>+ Add Custom Category</Text>
+          <AppText style={styles.addCategoryLinkText}>+ Add Custom Category</AppText>
         </TouchableOpacity>
       )}
 
@@ -186,10 +210,40 @@ const getBudgetFor = (categoryId: number) =>
         const existing = getBudgetFor(cat.id);
         return (
           <View key={cat.id} style={styles.row}>
-  <Text style={styles.categoryName}>{cat.name}</Text>
+  {renamingId === cat.id ? (
+    <View style={styles.inputRow}>
+      <TextField
+        style={styles.input}
+        value={renameValue}
+        onChangeText={setRenameValue}
+        autoFocus
+      />
+      <TouchableOpacity style={styles.saveBtn} onPress={handleRename}>
+        <AppText style={styles.saveBtnText}>Save</AppText>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.removeBtn} onPress={() => setRenamingId(null)}>
+        <AppText style={styles.removeBtnText}>Cancel</AppText>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <View style={styles.nameRow}>
+      <AppText style={styles.categoryName}>{cat.name}</AppText>
+      {!cat.is_default && (
+        <TouchableOpacity
+          onPress={() => {
+            setRenamingId(cat.id);
+            setRenameValue(cat.name);
+          }}
+          hitSlop={8}
+        >
+          <AppText style={styles.renameText}>Rename</AppText>
+        </TouchableOpacity>
+      )}
+    </View>
+  )}
 
   <View style={styles.inputRow}>
-    <TextInput
+    <TextField
       style={styles.input}
       keyboardType="numeric"
       placeholder="No limit"
@@ -203,7 +257,7 @@ const getBudgetFor = (categoryId: number) =>
       style={styles.saveBtn}
       onPress={() => handleSave(cat.id)}
     >
-      <Text style={styles.saveBtnText}>Save</Text>
+      <AppText style={styles.saveBtnText}>Save</AppText>
     </TouchableOpacity>
 
     {existing && (
@@ -211,7 +265,7 @@ const getBudgetFor = (categoryId: number) =>
         style={styles.removeBtn}
         onPress={() => handleRemove(cat.id)}
       >
-        <Text style={styles.removeBtnText}>Remove</Text>
+        <AppText style={styles.removeBtnText}>Remove</AppText>
       </TouchableOpacity>
     )}
 
@@ -220,55 +274,58 @@ const getBudgetFor = (categoryId: number) =>
         style={styles.deleteCategoryBtn}
         onPress={() => handleDeleteCategory(cat.id, cat.name)}
       >
-        <Text style={styles.deleteCategoryText}>Delete</Text>
+        <AppText style={styles.deleteCategoryText}>Delete</AppText>
       </TouchableOpacity>
     )}
   </View>
 </View>
         );
       })}
-    </ScrollView>
+    </FormScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 16 },
-  intro: { fontSize: 13, color: '#666', marginBottom: 16 },
-  addCategoryLink: { marginBottom: 16 },
-  addCategoryLinkText: { fontSize: 14, color: '#2563eb', fontWeight: '700' },
-  addCategoryBox: {
-    marginBottom: 20,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    padding: 12,
-  },
-  label: { fontSize: 13, color: '#666', marginBottom: 6 },
-  row: { marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 12 },
-  categoryName: { fontSize: 15, fontWeight: '600', marginBottom: 6 },
-  inputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background, padding: 16 },
+    intro: { fontSize: 13, color: c.textMuted, marginBottom: 16 },
+    addCategoryLink: { marginBottom: 16 },
+    addCategoryLinkText: { fontSize: 14, color: c.primary, fontWeight: '700' },
+    addCategoryBox: {
+      marginBottom: 20,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: 10,
+      padding: 12,
+    },
+    label: { fontSize: 13, color: c.textMuted, marginBottom: 6 },
+    row: { marginBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border, paddingBottom: 12 },
+    categoryName: { fontSize: 15, fontWeight: '600', marginBottom: 6 },
+    inputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+    input: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 8,
+      padding: 10,
+      fontSize: 14,
+      backgroundColor: c.background,
+    },
+    saveBtn: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
+    saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+    removeBtn: { backgroundColor: c.dangerBg, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12 },
+    removeBtnText: { color: c.danger, fontWeight: '600', fontSize: 13 },
+    deleteCategoryBtn: {
+    backgroundColor: '#dc2626',
     borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
-  saveBtn: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  removeBtn: { backgroundColor: '#fee2e2', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12 },
-  removeBtnText: { color: '#d33', fontWeight: '600', fontSize: 13 },
-  deleteCategoryBtn: {
-  backgroundColor: '#dc2626',
-  borderRadius: 8,
-  paddingVertical: 10,
-  paddingHorizontal: 12,
-},
 
-deleteCategoryText: {
-  color: '#fff',
-  fontWeight: '600',
-  fontSize: 13,
-},
-});
+  deleteCategoryText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+    nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    renameText: { fontSize: 12, color: c.primary },
+  });

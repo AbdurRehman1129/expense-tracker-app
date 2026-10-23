@@ -1,34 +1,27 @@
 import { useState, useCallback } from 'react';
 import { useDateField } from '@/hooks/use-today';
 import { toDateString, parseDateString } from '@/utils/date';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Alert,
-  Modal,
-  Keyboard,
-} from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Modal, Keyboard } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useFocusEffect } from 'expo-router';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getAllCategories, addCategory } from '@/db/categories';
-import { addExpense, getAllExpenses, deleteExpense } from '@/db/expenses';
+import { addExpense, getExpensesPage, deleteExpense, getExpensesByCategory } from '@/db/expenses';
 import { Category, Expense } from '@/types';
 import ExpenseListItem from '@/components/ExpenseListItem';
 import { getBudgetForCategory } from '@/db/budgets';
 import { sendBudgetExceededNotification, scheduleDailyReminder } from '@/utils/notifications';
-import { getExpensesByCategory } from '@/db/expenses';
 import { getMonthRange } from '@/utils/dateRanges';
-
-
+import { AppText } from '@/components/ui/AppText';
+import { TextField } from '@/components/ui/TextField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
+import { useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
+import { SelectField } from '@/components/ui/SelectField';
+import { PAYMENT_OPTIONS } from '@/constants/options';
+import { openExpenseEditor, openHistory } from '@/utils/navigation';
 
 export default function AddExpenseScreen() {
+  const styles = useThemedStyles(makeStyles);
   const [categories, setCategories] = useState<Category[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
@@ -48,7 +41,7 @@ export default function AddExpenseScreen() {
     if (cats.length > 0 && categoryId === null) {
       setCategoryId(cats[0].id);
     }
-    const exps = await getAllExpenses();
+    const exps = await getExpensesPage({ limit: 20 });
     setExpenses(exps);
   }, [categoryId]);
 
@@ -183,13 +176,13 @@ const handleSave = async () => {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <FormScrollView style={styles.container}>
       <View style={styles.form}>
         <TouchableOpacity onPress={() => router.push('/recurring-expenses')}>
-          <Text style={styles.recurringLink}>Manage Recurring Expenses</Text>
+          <AppText style={styles.recurringLink}>Manage Recurring Expenses</AppText>
         </TouchableOpacity>
-        <Text style={styles.label}>Amount</Text>
-        <TextInput
+        <AppText style={styles.label}>Amount</AppText>
+        <TextField
           style={styles.input}
           keyboardType="numeric"
           placeholder="0"
@@ -198,22 +191,22 @@ const handleSave = async () => {
         />
 
         <View style={styles.rowBetween}>
-          <Text style={styles.label}>Category</Text>
+          <AppText style={styles.label}>Category</AppText>
           <TouchableOpacity onPress={() => setShowAddCategory(true)}>
-            <Text style={styles.linkText}>+ Add New Category</Text>
+            <AppText style={styles.linkText}>+ Add New Category</AppText>
           </TouchableOpacity>
         </View>
-        <View style={styles.pickerWrapper}>
-          <Picker selectedValue={categoryId} onValueChange={(val) => setCategoryId(val)}>
-            {categories.map((cat) => (
-              <Picker.Item key={cat.id} label={cat.name} value={cat.id} />
-            ))}
-          </Picker>
-        </View>
+        <SelectField
+          value={categoryId}
+          options={categories.map((cat) => ({ label: cat.name, value: cat.id }))}
+          onChange={setCategoryId}
+          placeholder="Select category"
+          title="Category"
+        />
 
-        <Text style={styles.label}>Date</Text>
+        <AppText style={styles.label}>Date</AppText>
         <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-          <Text>{date}</Text>
+          <AppText>{date}</AppText>
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
@@ -229,17 +222,16 @@ const handleSave = async () => {
           />
         )}
 
-        <Text style={styles.label}>Payment Method</Text>
-        <View style={styles.pickerWrapper}>
-          <Picker selectedValue={paymentMethod} onValueChange={setPaymentMethod}>
-            <Picker.Item label="Cash" value="Cash" />
-            <Picker.Item label="Card" value="Card" />
-            <Picker.Item label="Bank Transfer" value="Bank" />
-          </Picker>
-        </View>
+        <AppText style={styles.label}>Payment Method</AppText>
+        <SelectField
+          value={paymentMethod}
+          options={PAYMENT_OPTIONS}
+          onChange={setPaymentMethod}
+          title="Payment Method"
+        />
 
-        <Text style={styles.label}>Note (optional)</Text>
-        <TextInput
+        <AppText style={styles.label}>Note (optional)</AppText>
+        <TextField
           style={styles.input}
           placeholder="e.g. groceries"
           value={note}
@@ -247,29 +239,42 @@ const handleSave = async () => {
         />
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Expense</Text>
+          <AppText style={styles.saveButtonText}>Save Expense</AppText>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Expenses</Text>
+      <AppText style={styles.sectionTitle}>Recent Expenses</AppText>
       {expenses.length === 0 ? (
-        <Text style={styles.empty}>No expenses logged yet.</Text>
+        <AppText style={styles.empty}>No expenses logged yet.</AppText>
       ) : (
         expenses.map((exp) => (
           <ExpenseListItem
             key={exp.id}
             expense={exp}
             categoryName={getCategoryName(exp.category_id)}
+            onEdit={openExpenseEditor}
             onDelete={handleDelete}
           />
         ))
       )}
+      <TouchableOpacity onPress={() => openHistory('expenses')}>
+        <AppText style={styles.viewAllLink}>View all expenses →</AppText>
+      </TouchableOpacity>
 
-      <Modal visible={showAddCategory} animationType="slide" transparent>
+      <Modal
+        visible={showAddCategory}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => {
+          setShowAddCategory(false);
+          setNewCategoryName('');
+        }}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Category</Text>
-            <TextInput
+            <AppText style={styles.modalTitle}>New Category</AppText>
+            <TextField
               style={styles.input}
               placeholder="e.g. Subscriptions"
               value={newCategoryName}
@@ -277,7 +282,7 @@ const handleSave = async () => {
               autoFocus
             />
             <TouchableOpacity style={styles.saveButton} onPress={handleAddCategory}>
-              <Text style={styles.saveButtonText}>Add Category</Text>
+              <AppText style={styles.saveButtonText}>Add Category</AppText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalClose}
@@ -286,47 +291,45 @@ const handleSave = async () => {
                 setNewCategoryName('');
               }}
             >
-              <Text style={styles.modalCloseText}>Cancel</Text>
+              <AppText style={styles.modalCloseText}>Cancel</AppText>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </FormScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  form: { padding: 16 },
-  label: { fontSize: 13, color: '#666', marginTop: 12, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-  },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-  },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  linkText: { fontSize: 12, color: '#2563eb', fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
-  modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
-  modalClose: { marginTop: 12, alignItems: 'center', padding: 10 },
-  modalCloseText: { color: '#2563eb', fontWeight: '600' },
-  saveButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
-  empty: { textAlign: 'center', color: '#999', marginTop: 20 },
-  recurringLink: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginBottom: 8 },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    form: { padding: 16 },
+    label: { fontSize: 13, color: c.textMuted, marginTop: 12, marginBottom: 4 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 15,
+    },
+    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
+    linkText: { fontSize: 12, color: c.primary, fontWeight: '600' },
+    // Anchored near the top so the keyboard can never cover the field
+    modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-start', paddingTop: 96, paddingHorizontal: 16 },
+    modalContent: { backgroundColor: c.card, borderRadius: 16, padding: 16 },
+    modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
+    modalClose: { marginTop: 12, alignItems: 'center', padding: 10 },
+    modalCloseText: { color: c.primary, fontWeight: '600' },
+    saveButton: {
+      backgroundColor: '#2563eb',
+      borderRadius: 8,
+      padding: 14,
+      alignItems: 'center',
+      marginTop: 20,
+    },
+    saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 8 },
+    empty: { textAlign: 'center', color: c.textMuted, marginTop: 20 },
+    recurringLink: { fontSize: 13, color: c.primary, fontWeight: '600', marginBottom: 8 },
+    viewAllLink: { textAlign: 'center', color: c.primary, fontWeight: '600', padding: 16 },
+  });

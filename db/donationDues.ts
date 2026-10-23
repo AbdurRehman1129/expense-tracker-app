@@ -1,9 +1,34 @@
-import { getDatabase } from './database';
+import { getDatabase, runInTransaction } from './database';
 import { DonationDue, DonationType } from '../types';
+import { DbError } from './errors';
+import { round2, toCents } from '../utils/money';
+
+/**
+ * LEDGER MODEL
+ * A "due" is a pledge: how much you decided to donate. Pledges are never
+ * deleted or shrunk when you give. What is left to give is simply:
+ *
+ *   remaining(type) = SUM(donation_dues) - SUM(donations)
+ *
+ * so editing or deleting a donation can never corrupt the numbers.
+ */
 
 export async function getAllDonationDues(): Promise<DonationDue[]> {
   const db = await getDatabase();
-  return db.getAllAsync<DonationDue>('SELECT * FROM donation_dues ORDER BY date DESC');
+  return db.getAllAsync<DonationDue>('SELECT * FROM donation_dues ORDER BY date DESC, id DESC');
+}
+
+export async function getDonationDueById(id: number): Promise<DonationDue | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<DonationDue>('SELECT * FROM donation_dues WHERE id = ?', [id]);
+}
+
+/**
+ * The automatic row the v2 migration adds per type ("pledges you already gave").
+ * It keeps old numbers correct, so it can't be edited or deleted by hand.
+ */
+export function isMigrationDue(due: Pick<DonationDue, 'note'>): boolean {
+  return (due.note ?? '').startsWith('Migration:');
 }
 
 export async function addDonationDue(due: {
@@ -21,12 +46,8 @@ export async function addDonationDue(due: {
   return result.lastInsertRowId;
 }
 
-export async function deleteDonationDue(id: number): Promise<void> {
-  const db = await getDatabase();
-  await db.runAsync('DELETE FROM donation_dues WHERE id = ?', [id]);
-}
-
-export async function getDueTotals(
+/** Total pledged for a type (optionally within a date range). */
+export async function getPledgedTotal(
   type: DonationType,
   startDate?: string,
   endDate?: string
@@ -44,54 +65,86 @@ export async function getDueTotals(
   return result?.total ?? 0;
 }
 
-/**
- * Consume `amount` worth of "due" from the oldest due entries of `type` first (FIFO).
- * Entries are fully deleted once used up, or reduced if only partially consumed.
- * Call this whenever a donation is actually given, so "To Be Donated" reflects
- * what's actually left to give (not just a display-time subtraction).
- */
-export async function reduceDueAmount(type: DonationType, amount: number): Promise<void> {
-  if (amount <= 0) return;
+/** pledged - given, NOT clamped (can be negative if data is inconsistent). */
+export async function getRawRemaining(type: DonationType): Promise<number> {
   const db = await getDatabase();
-
-  let remaining = amount;
-  const dues = await db.getAllAsync<DonationDue>(
-    'SELECT * FROM donation_dues WHERE type = ? ORDER BY date ASC, id ASC',
-    [type]
+  const row = await db.getFirstAsync<{ pledged: number; given: number }>(
+    `SELECT
+       (SELECT COALESCE(SUM(amount), 0) FROM donation_dues WHERE type = ?) AS pledged,
+       (SELECT COALESCE(SUM(amount), 0) FROM donations WHERE type = ?) AS given`,
+    [type, type]
   );
+  return round2((row?.pledged ?? 0) - (row?.given ?? 0));
+}
 
-  for (const due of dues) {
-    if (remaining <= 0) break;
-
-    if (due.amount <= remaining + 1e-9) {
-      remaining -= due.amount;
-      await db.runAsync('DELETE FROM donation_dues WHERE id = ?', [due.id]);
-    } else {
-      await db.runAsync('UPDATE donation_dues SET amount = ? WHERE id = ?', [
-        due.amount - remaining,
-        due.id,
-      ]);
-      remaining = 0;
-    }
-  }
-  // If remaining > 0 here, more was donated than was on record as due (shouldn't
-  // happen since the UI blocks over-donating), so there's simply nothing left to consume.
+/** What is still "To Be Donated" for a type (never below 0). */
+export async function getRemaining(type: DonationType): Promise<number> {
+  return Math.max(0, await getRawRemaining(type));
 }
 
 /**
- * Adds `amount` back as a new due entry of `type`. Used to undo reduceDueAmount
- * when a donation is deleted or edited.
+ * Deleting a pledge is only allowed if what was already given still fits in
+ * the remaining pledges (otherwise "To Be Donated" would go negative).
  */
-export async function restoreDueAmount(
-  type: DonationType,
-  amount: number,
-  date: string,
-  note?: string
+export async function deleteDonationDue(id: number): Promise<void> {
+  await runInTransaction(async () => {
+    const db = await getDatabase();
+    const due = await db.getFirstAsync<DonationDue>('SELECT * FROM donation_dues WHERE id = ?', [id]);
+    if (!due) return;
+    if (isMigrationDue(due)) {
+      throw new DbError('LOCKED_ENTRY', 'This automatic entry cannot be deleted.');
+    }
+
+    const remainingAfter = (await getRawRemaining(due.type)) - due.amount;
+    if (toCents(remainingAfter) < 0) {
+      throw new DbError(
+        'DUE_IN_USE',
+        'This pledge has already been donated and cannot be deleted.',
+        { shortBy: round2(-remainingAfter) }
+      );
+    }
+    await db.runAsync('DELETE FROM donation_dues WHERE id = ?', [id]);
+  });
+}
+
+/**
+ * Edits a pledge. The change is refused if it would leave less pledged than
+ * has already been donated (so "To Be Donated" can never go negative).
+ */
+export async function updateDonationDue(
+  id: number,
+  updates: { type?: DonationType; amount?: number; date?: string; note?: string | null }
 ): Promise<void> {
-  if (amount <= 0) return;
-  const db = await getDatabase();
-  await db.runAsync(
-    'INSERT INTO donation_dues (type, amount, date, note) VALUES (?, ?, ?, ?)',
-    [type, amount, date, note ?? 'Restored (donation deleted/edited)']
-  );
+  await runInTransaction(async () => {
+    const db = await getDatabase();
+    const existing = await db.getFirstAsync<DonationDue>('SELECT * FROM donation_dues WHERE id = ?', [id]);
+    if (!existing) return;
+
+    if (isMigrationDue(existing)) {
+      throw new DbError('LOCKED_ENTRY', 'This automatic entry cannot be edited.');
+    }
+
+    const type = updates.type ?? existing.type;
+    const amount = updates.amount ?? existing.amount;
+    const date = updates.date ?? existing.date;
+    const note = updates.note !== undefined ? updates.note : existing.note;
+
+    // Remaining of the ORIGINAL type once this pledge is taken out of it...
+    let remainingAfter = (await getRawRemaining(existing.type)) - existing.amount;
+    // ...plus the new amount if it stays in that same type.
+    if (type === existing.type) remainingAfter += amount;
+
+    if (toCents(remainingAfter) < 0) {
+      throw new DbError(
+        'DUE_IN_USE',
+        'Part of this pledge has already been donated, so it cannot be reduced that far.',
+        { shortBy: round2(-remainingAfter) }
+      );
+    }
+
+    await db.runAsync(
+      'UPDATE donation_dues SET type = ?, amount = ?, date = ?, note = ?, updated_at = ? WHERE id = ?',
+      [type, amount, date, note, new Date().toISOString(), id]
+    );
+  });
 }

@@ -1,25 +1,22 @@
 import { useState, useCallback } from 'react';
 import { useDateField } from '@/hooks/use-today';
 import { toDateString, parseDateString } from '@/utils/date';
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Alert,
-  Keyboard,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform, Alert, Keyboard } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
 
-import { addDonation, getAllDonations, deleteDonation, getDonationTotals } from '@/db/donations';
-import { getDueTotals } from '@/db/donationDues';
+import { addDonation, getDonationsPage, deleteDonation, getDonationTotals } from '@/db/donations';
+import { getRemaining } from '@/db/donationDues';
+import { isDbError } from '@/db/errors';
 import { Donation, DonationType } from '@/types';
 import DonationListItem from '@/components/DonationListItem';
-
+import { AppText } from '@/components/ui/AppText';
+import { TextField } from '@/components/ui/TextField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
+import { useThemedStyles } from '@/contexts/ThemeContext';
+import { AppColors } from '@/constants/colors';
+import { formatMoney } from '@/utils/money';
+import { openDonationEditor, openHistory } from '@/utils/navigation';
 
 const TYPES: { key: DonationType; label: string }[] = [
   { key: 'zakat', label: 'Zakat' },
@@ -27,6 +24,7 @@ const TYPES: { key: DonationType; label: string }[] = [
 ];
 
 export default function DonationScreen() {
+  const styles = useThemedStyles(makeStyles);
   const [donations, setDonations] = useState<Donation[]>([]);
   const [totalDue, setTotalDue] = useState(0);
   const [totalGiven, setTotalGiven] = useState(0);
@@ -45,12 +43,12 @@ export default function DonationScreen() {
   const [note, setNote] = useState('');
 
   const loadData = useCallback(async () => {
-    const list = await getAllDonations();
+    const list = await getDonationsPage({ limit: 20 });
     setDonations(list);
 
     const [zakatDue, sadqaDue, zakatGiven, sadqaGiven] = await Promise.all([
-      getDueTotals('zakat'),
-      getDueTotals('sadqa'),
+      getRemaining('zakat'),
+      getRemaining('sadqa'),
       getDonationTotals('zakat'),
       getDonationTotals('sadqa'),
     ]);
@@ -83,9 +81,9 @@ export default function DonationScreen() {
     if (numericAmount > remaining) {
       Alert.alert(
         'Amount too high',
-        `You can donate at most Rs ${remaining.toFixed(0)} for ${
+        `You can donate at most ${formatMoney(remaining)} for ${
           type === 'zakat' ? 'Zakat' : 'Sadqa'
-        } right now. You've entered Rs ${numericAmount.toFixed(0)}.`
+        } right now. You've entered ${formatMoney(numericAmount)}.`
       );
       return;
     }
@@ -107,6 +105,17 @@ export default function DonationScreen() {
 
     Alert.alert('Success', 'Donation saved successfully!');
   } catch (error) {
+    if (isDbError(error, 'INSUFFICIENT_DUE')) {
+      // The database is the final judge (e.g. two quick taps): explain and refresh the numbers.
+      Alert.alert(
+        'Amount too high',
+        `You can donate at most ${formatMoney(error.details.remaining)} for ${
+          type === 'zakat' ? 'Zakat' : 'Sadqa'
+        } right now.`
+      );
+      await loadData();
+      return;
+    }
     console.error('Failed to save donation:', error);
 
     Alert.alert(
@@ -148,43 +157,43 @@ export default function DonationScreen() {
   );
 };
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <FormScrollView style={styles.container}>
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, { backgroundColor: '#f59e0b' }]}>
-          <Text style={styles.summaryLabel}>To Be Donated</Text>
-          <Text style={styles.summaryAmount}>Rs {totalDue.toFixed(0)}</Text>
+          <AppText style={styles.summaryLabel}>To Be Donated</AppText>
+          <AppText style={styles.summaryAmount}>{formatMoney(totalDue)}</AppText>
         </View>
         <View style={[styles.summaryCard, { backgroundColor: '#16a34a' }]}>
-          <Text style={styles.summaryLabel}>Donated</Text>
-          <Text style={styles.summaryAmount}>Rs {totalGiven.toFixed(0)}</Text>
+          <AppText style={styles.summaryLabel}>Donated</AppText>
+          <AppText style={styles.summaryAmount}>{formatMoney(totalGiven)}</AppText>
         </View>
       </View>
 
       <TouchableOpacity style={styles.logDueButton} onPress={() => router.push('/donation-due')}>
-        <Text style={styles.logDueButtonText}>+ Log Donation (Zakat/Sadqa Due)</Text>
+        <AppText style={styles.logDueButtonText}>+ Log Donation (Zakat/Sadqa Due)</AppText>
       </TouchableOpacity>
 
-      <Text style={styles.sectionTitle}>Breakdown by Type</Text>
+      <AppText style={styles.sectionTitle}>Breakdown by Type</AppText>
       <View style={styles.breakdownRow}>
         <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>Zakat</Text>
-          <Text style={styles.breakdownRemaining}>
-            To Be Donated: Rs {breakdown.zakatDue.toFixed(0)}
-          </Text>
-          <Text style={styles.breakdownLine}>Donated: Rs {breakdown.zakatGiven.toFixed(0)}</Text>
+          <AppText style={styles.breakdownTitle}>Zakat</AppText>
+          <AppText style={styles.breakdownRemaining}>
+            To Be Donated: {formatMoney(breakdown.zakatDue)}
+          </AppText>
+          <AppText style={styles.breakdownLine}>Donated: {formatMoney(breakdown.zakatGiven)}</AppText>
         </View>
         <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>Sadqa</Text>
-          <Text style={styles.breakdownRemaining}>
-            To Be Donated: Rs {breakdown.sadqaDue.toFixed(0)}
-          </Text>
-          <Text style={styles.breakdownLine}>Donated: Rs {breakdown.sadqaGiven.toFixed(0)}</Text>
+          <AppText style={styles.breakdownTitle}>Sadqa</AppText>
+          <AppText style={styles.breakdownRemaining}>
+            To Be Donated: {formatMoney(breakdown.sadqaDue)}
+          </AppText>
+          <AppText style={styles.breakdownLine}>Donated: {formatMoney(breakdown.sadqaGiven)}</AppText>
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Record a Donation Given</Text>
+      <AppText style={styles.sectionTitle}>Record a Donation Given</AppText>
       <View style={styles.form}>
-        <Text style={styles.label}>Type</Text>
+        <AppText style={styles.label}>Type</AppText>
         <View style={styles.typeSelector}>
           {TYPES.map((t) => (
             <TouchableOpacity
@@ -192,15 +201,15 @@ export default function DonationScreen() {
               style={[styles.typeButton, type === t.key && styles.typeButtonActive]}
               onPress={() => setType(t.key)}
             >
-              <Text style={[styles.typeButtonText, type === t.key && styles.typeButtonTextActive]}>
+              <AppText style={[styles.typeButtonText, type === t.key && styles.typeButtonTextActive]}>
                 {t.label}
-              </Text>
+              </AppText>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={styles.label}>Amount</Text>
-        <TextInput
+        <AppText style={styles.label}>Amount</AppText>
+        <TextField
           style={styles.input}
           keyboardType="numeric"
           placeholder="0"
@@ -208,17 +217,17 @@ export default function DonationScreen() {
           onChangeText={setAmount}
         />
 
-        <Text style={styles.label}>To Whom</Text>
-        <TextInput
+        <AppText style={styles.label}>To Whom</AppText>
+        <TextField
           style={styles.input}
           placeholder="e.g. Edhi Foundation, Ali"
           value={recipient}
           onChangeText={setRecipient}
         />
 
-        <Text style={styles.label}>When</Text>
+        <AppText style={styles.label}>When</AppText>
         <TouchableOpacity style={styles.input} onPress={() => setShowDatePicker(true)}>
-          <Text>{date}</Text>
+          <AppText>{date}</AppText>
         </TouchableOpacity>
         {showDatePicker && (
           <DateTimePicker
@@ -232,54 +241,66 @@ export default function DonationScreen() {
           />
         )}
 
-        <Text style={styles.label}>Why (optional)</Text>
-        <TextInput style={styles.input} placeholder="Reason / note" value={note} onChangeText={setNote} />
+        <AppText style={styles.label}>Why (optional)</AppText>
+        <TextField style={styles.input} placeholder="Reason / note" value={note} onChangeText={setNote} />
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Donation</Text>
+          <AppText style={styles.saveButtonText}>Save Donation</AppText>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>Recent Donations Given</Text>
+      <AppText style={styles.sectionTitle}>Recent Donations Given</AppText>
       {donations.length === 0 ? (
-        <Text style={styles.empty}>No donations logged yet.</Text>
+        <AppText style={styles.empty}>No donations logged yet.</AppText>
       ) : (
-        donations.map((d) => <DonationListItem key={d.id} donation={d} onDelete={handleDelete} />)
+        donations.map((d) => (
+          <DonationListItem
+            key={d.id}
+            donation={d}
+            onEdit={(x) => openDonationEditor(x.id)}
+            onDelete={handleDelete}
+          />
+        ))
       )}
-    </ScrollView>
+      <TouchableOpacity onPress={() => openHistory('donations')}>
+        <AppText style={styles.viewAllLink}>View all donations →</AppText>
+      </TouchableOpacity>
+    </FormScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  summaryRow: { flexDirection: 'row', padding: 12, gap: 8 },
-  summaryCard: { flex: 1, borderRadius: 10, padding: 14, alignItems: 'center' },
-  summaryLabel: { color: '#fff', fontSize: 12 },
-  summaryAmount: { color: '#fff', fontSize: 20, fontWeight: '800', marginTop: 4 },
-  logDueButton: {
-    marginHorizontal: 16,
-    marginTop: 4,
-    backgroundColor: '#f59e0b',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  logDueButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 20, marginBottom: 8 },
-  breakdownRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8 },
-  breakdownCard: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 10, padding: 12 },
-  breakdownTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
-  breakdownLine: { fontSize: 12, color: '#666' },
-  breakdownRemaining: { fontSize: 12, fontWeight: '700', color: '#2563eb', marginTop: 4 },
-  form: { paddingHorizontal: 16 },
-  label: { fontSize: 13, color: '#666', marginTop: 12, marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 15 },
-  typeSelector: { flexDirection: 'row', gap: 8 },
-  typeButton: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
-  typeButtonActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
-  typeButtonText: { fontSize: 14, fontWeight: '600', color: '#333' },
-  typeButtonTextActive: { color: '#fff' },
-  saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  empty: { textAlign: 'center', color: '#999', marginTop: 10, marginBottom: 20 },
-});
+const makeStyles = (c: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    summaryRow: { flexDirection: 'row', padding: 12, gap: 8 },
+    summaryCard: { flex: 1, borderRadius: 10, padding: 14, alignItems: 'center' },
+    summaryLabel: { color: '#fff', fontSize: 12 },
+    summaryAmount: { color: '#fff', fontSize: 20, fontWeight: '800', marginTop: 4 },
+    logDueButton: {
+      marginHorizontal: 16,
+      marginTop: 4,
+      backgroundColor: '#f59e0b',
+      borderRadius: 8,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    logDueButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', marginLeft: 16, marginTop: 20, marginBottom: 8 },
+    breakdownRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8 },
+    breakdownCard: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 12 },
+    breakdownTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6 },
+    breakdownLine: { fontSize: 12, color: c.textMuted },
+    breakdownRemaining: { fontSize: 12, fontWeight: '700', color: c.primary, marginTop: 4 },
+    form: { paddingHorizontal: 16 },
+    label: { fontSize: 13, color: c.textMuted, marginTop: 12, marginBottom: 4 },
+    input: { borderWidth: 1, borderColor: c.border, borderRadius: 8, padding: 12, fontSize: 15 },
+    typeSelector: { flexDirection: 'row', gap: 8 },
+    typeButton: { flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+    typeButtonActive: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+    typeButtonText: { fontSize: 14, fontWeight: '600', color: c.text },
+    typeButtonTextActive: { color: '#fff' },
+    saveButton: { backgroundColor: '#2563eb', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 20 },
+    saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    empty: { textAlign: 'center', color: c.textMuted, marginTop: 10, marginBottom: 20 },
+    viewAllLink: { textAlign: 'center', color: c.primary, fontWeight: '600', padding: 16 },
+  });

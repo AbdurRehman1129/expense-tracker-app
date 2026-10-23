@@ -59,3 +59,25 @@ export async function deleteCategory(id: number): Promise<void> {
     [id]
   );
 }
+
+/** Renames a custom category. Default categories are looked up by name elsewhere, so they stay fixed. */
+export async function renameCategory(id: number, newName: string): Promise<void> {
+  const name = newName.trim();
+  if (!name) throw new Error('Category name cannot be empty.');
+
+  const db = await getDatabase();
+  const category = await db.getFirstAsync<{ is_default: number }>(
+    'SELECT is_default FROM categories WHERE id = ?',
+    [id]
+  );
+  if (!category) throw new Error('Category not found.');
+  if (category.is_default === 1) throw new Error('Default categories cannot be renamed.');
+
+  const clash = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM categories WHERE LOWER(name) = LOWER(?) AND id != ?',
+    [name, id]
+  );
+  if (clash) throw new Error('A category with this name already exists.');
+
+  await db.runAsync('UPDATE categories SET name = ? WHERE id = ?', [name, id]);
+}

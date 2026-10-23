@@ -6,6 +6,44 @@ export async function getAllIncome(): Promise<Income[]> {
   return db.getAllAsync<Income>('SELECT * FROM income ORDER BY date DESC');
 }
 
+export async function getIncomeById(id: number): Promise<Income | null> {
+  const db = await getDatabase();
+  return db.getFirstAsync<Income>('SELECT * FROM income WHERE id = ?', [id]);
+}
+
+export type IncomePageOptions = {
+  limit?: number;
+  offset?: number;
+  /** Inclusive range, both required to apply. */
+  start?: string;
+  end?: string;
+  /** Matches the source or note. */
+  search?: string;
+};
+
+/** A page of income entries (newest first) for long lists. */
+export async function getIncomePage(options: IncomePageOptions = {}): Promise<Income[]> {
+  const db = await getDatabase();
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (options.start && options.end) {
+    where.push('date BETWEEN ? AND ?');
+    params.push(options.start, options.end);
+  }
+  const search = options.search?.trim();
+  if (search) {
+    where.push('(source LIKE ? OR note LIKE ?)');
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  const sql =
+    `SELECT * FROM income${where.length ? ' WHERE ' + where.join(' AND ') : ''} ` +
+    'ORDER BY date DESC, id DESC LIMIT ? OFFSET ?';
+  params.push(options.limit ?? 50, options.offset ?? 0);
+  return db.getAllAsync<Income>(sql, params);
+}
+
 export async function addIncome(income: {
   amount: number;
   source?: string;
@@ -20,11 +58,18 @@ export async function addIncome(income: {
   return result.lastInsertRowId;
 }
 
+/** Updates only the fields you pass; everything else keeps its current value. */
 export async function updateIncome(id: number, updates: Partial<Income>): Promise<void> {
   const db = await getDatabase();
+  const existing = await db.getFirstAsync<Income>('SELECT * FROM income WHERE id = ?', [id]);
+  if (!existing) return;
+
+  const pick = <K extends keyof Income>(key: K): Income[K] =>
+    (updates[key] !== undefined ? updates[key] : existing[key]) as Income[K];
+
   await db.runAsync(
-    'UPDATE income SET amount = ?, source = ?, date = ?, note = ? WHERE id = ?',
-    [updates.amount ?? null, updates.source ?? null, updates.date ?? null, updates.note ?? null, id]
+    'UPDATE income SET amount = ?, source = ?, date = ?, note = ?, updated_at = ? WHERE id = ?',
+    [pick('amount'), pick('source'), pick('date'), pick('note'), new Date().toISOString(), id]
   );
 }
 
@@ -63,4 +108,4 @@ export async function getIncomeRowsForExport(
 
   query += ' ORDER BY date DESC';
   return db.getAllAsync(query, params);
-}
+}
